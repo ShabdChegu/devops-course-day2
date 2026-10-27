@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# uv-managed venvs
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# local state
+*.db
+*.sqlite3
+logs/
