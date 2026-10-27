@@ -20,7 +20,7 @@ check:
 
 # uv owns the venv: `uv run` creates .venv on first use from pyproject/uv.lock.
 run:
-	uv run uvicorn main:app --reload --port 8000
+	uv run uvicorn notes_app.main:app --reload --port 8000
 
 test:
 	uv run pytest -q

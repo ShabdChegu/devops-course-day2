@@ -6,7 +6,7 @@ SQLite layer, so the CI pipeline in ch.7 has something meaningful to run.
 
 from fastapi.testclient import TestClient
 
-from main import app
+from notes_app.main import app
 
 client = TestClient(app)
 

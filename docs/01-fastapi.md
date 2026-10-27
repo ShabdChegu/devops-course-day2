@@ -32,19 +32,23 @@ on:
 ## What changed in this branch
 | File | Why it's here |
 |------|---------------|
-| `pyproject.toml` | uv project: `fastapi`, `uvicorn` (runtime) + `pytest`, `httpx`, `ruff` (dev group); ruff + pytest config inline |
+| `pyproject.toml` | uv project: `fastapi`, `uvicorn` (runtime) + `pytest`, `httpx`, `ruff` (dev group); ruff + pytest + build config inline |
 | `uv.lock` | Exact versions — the reproducibility artifact |
-| `main.py` | One job: create `app`, mount the router |
-| `models.py` | The data layer: an in-memory dict with `list/get/create/delete` |
-| `views.py` | The controller layer: `GET/POST/DELETE /notes` JSON API + `/` landing |
+| `notes_app/main.py` | One job: create `app`, mount the router |
+| `notes_app/models.py` | The data layer: an in-memory dict with `list/get/create/delete` |
+| `notes_app/views.py` | The controller layer: `GET/POST/DELETE /notes` JSON API + `/` landing |
 | `tests/test_app.py` | Two placeholder tests (landing page, CRUD cycle) so `make test` passes on day one |
 | `Makefile` | Adds `run` / `test` / `lint` / `lint-fix` on top of ch.0's `check` + `help` |
 
-No `.gitignore` changes on this branch (`.venv/`, `__pycache__/` were already
-ignored in ch.0). And note what's **not** in git: `.venv/`. What *is*:
-`uv.lock` — that contrast is the whole lesson.
+App code lives in a **package** — `notes_app/` (named after the project) — not
+scattered at the repo root. `notes_app/main.py` is the module uvicorn imports
+(`notes_app.main:app`). ch.6's `logging_config.py` and ch.10's `otel.py` land
+in this same folder. No `.gitignore` changes on this branch (`.venv/`,
+`__pycache__/` were already ignored in ch.0). And note what's **not** in git:
+`.venv/`. What *is*: `uv.lock` — that contrast is the whole lesson.
 
-Run it: `make run` → http://127.0.0.1:8000/docs is an auto-generated API UI.
+Run it: `make run` (imports `notes_app.main:app`) → http://127.0.0.1:8000/docs
+is an auto-generated API UI.
 
 ## Try it yourself
 ```bash

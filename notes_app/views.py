@@ -7,7 +7,7 @@ file, served from the same model functions - two faces of one dataset.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from models import Note, create_note, delete_note, get_note, list_notes
+from .models import Note, create_note, delete_note, get_note, list_notes
 
 router = APIRouter()
 

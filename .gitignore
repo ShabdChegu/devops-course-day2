@@ -13,3 +13,7 @@ __pycache__/
 *.db
 *.sqlite3
 logs/
+
+# tool caches
+.ruff_cache/
+.pytest_cache/

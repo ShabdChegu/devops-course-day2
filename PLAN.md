@@ -28,19 +28,19 @@ Every chapter is its own git branch, and each branch's end state is clean, worki
 | # | Chapter | Branch | What's added | Key files |
 |---|---------|--------|--------------|-----------|
 | 0 | Course intro, repo layout, git basics | `main` | `README.md` (with the evolving mermaid diagram — **#9**), this `PLAN.md`, `docs/_template.md` (**#1**), `make check` prerequisites gate (**#5**), repo skeleton | `README.md`, `PLAN.md`, `docs/_template.md`, `Makefile` (check) |
-| 1 | FastAPI backend, in-memory store | `01-fastapi` | uv setup (`pyproject.toml` + `uv.lock` — no hand-rolled venv/requirements); **ruff** as the single lint/format tool (**#2**); MVC skeleton: `main.py`, `models.py` (in-memory store), `views.py` (CRUD routes); `Makefile` (`make run` / `make test` / `make lint` from day one); one placeholder test so `make test` works | `pyproject.toml`, `main.py`, `models.py`, `views.py`, `Makefile`, `tests/` |
-| 2 | SQLite + SQLAlchemy | `02-sqlite` | model layer swaps in-memory → SQLite (SQLAlchemy); `views.py` **unchanged** — that's the layering lesson; `.gitignore` for `*.db`; **first smoke test** (`tests/test_smoke.py`) so CI later has something real to run | `models.py`, `tests/` |
-| 3 | Jinja UI, MVC in place | `03-jinja` | Jinja2 mount; one template per page (`templates/index.html`, `templates/new.html`, `templates/show.html`); `static/style.css` + `app.js`; same controller data serves HTML pages and the JSON API | `templates/`, `static/`, `views.py` |
+| 1 | FastAPI backend, in-memory store | `01-fastapi` | uv setup (`pyproject.toml` + `uv.lock` — no hand-rolled venv/requirements); **ruff** as the single lint/format tool (**#2**); MVC skeleton in the `notes_app/` package: `main.py`, `models.py` (in-memory store), `views.py` (CRUD routes); `Makefile` (`make run` / `make test` / `make lint` from day one); one placeholder test so `make test` works | `pyproject.toml`, `notes_app/`, `Makefile`, `tests/` |
+| 2 | SQLite + SQLAlchemy | `02-sqlite` | model layer swaps in-memory → SQLite (SQLAlchemy); `views.py` **unchanged** — that's the layering lesson; `.gitignore` for `*.db`; **first smoke test** (`tests/test_smoke.py`) so CI later has something real to run | `notes_app/models.py`, `tests/` |
+| 3 | Jinja UI, MVC in place | `03-jinja` | Jinja2 mount; one template per page (`templates/index.html`, `templates/new.html`, `templates/show.html`); `static/style.css` + `app.js`; same controller data serves HTML pages and the JSON API | `templates/`, `static/`, `notes_app/views.py` |
 | 4 | Dockerize the app | `04-docker` | uv-based `Dockerfile` (`uv sync` from `uv.lock` — fast, reproducible installs), `.dockerignore`; build + run; `docker run` vs local run | `Dockerfile`, `.dockerignore` |
-| 5 | Docker Compose + Postgres | `05-compose` | `docker-compose.yml` (app + postgres) with **profiles (`core` etc.)** (**#3**); env vars; model layer SQLite→Postgres (DB URL from env — the secrets story starts here, **+ secret-scan pre-commit hook (#8)**) | `docker-compose.yml`, `models.py`, `.pre-commit-config.yaml` |
-| 6 | Structured logging | `06-logging` | `logging_config.py` (JSON logs), read via `docker logs`; log file + rotation concept | `logging_config.py` |
+| 5 | Docker Compose + Postgres | `05-compose` | `docker-compose.yml` (app + postgres) with **profiles (`core` etc.)** (**#3**); env vars; model layer SQLite→Postgres (DB URL from env — the secrets story starts here, **+ secret-scan pre-commit hook (#8)**) | `docker-compose.yml`, `notes_app/models.py`, `.pre-commit-config.yaml` |
+| 6 | Structured logging | `06-logging` | `logging_config.py` (JSON logs), read via `docker logs`; log file + rotation concept | `notes_app/logging_config.py` |
 | 7 | Jenkins — CI pipeline | `07-jenkins-ci` | `Jenkinsfile` (lint, test, build image); Jenkins in `docker/` via compose profile | `Jenkinsfile`, `docker/jenkins-compose.yml` |
 | 8 | Jenkins — CD (deploy) | `08-jenkins-cd` | Deploy stage: tag/push image, a `scripts/deploy.sh` that pulls + restarts app container | `Jenkinsfile`, `scripts/deploy.sh` |
-| 9 | Health & readiness | `09-health` | `/health`, `/ready`; `HEALTHCHECK` in Dockerfile; compose `healthcheck:`; CD verifies | `main.py`, `Dockerfile`, `docker-compose.yml` |
-| 10 | OpenTelemetry — Tracing | `10-otel-tracing` | `otel.py` instruments FastAPI; exporter starts as Console (so no new containers yet); **add `trace_id` to every log line** (one line, connects logging ↔ tracing) | `otel.py`, `pyproject.toml`, `logging_config.py` |
+| 9 | Health & readiness | `09-health` | `/health`, `/ready`; `HEALTHCHECK` in Dockerfile; compose `healthcheck:`; CD verifies | `notes_app/main.py`, `Dockerfile`, `docker-compose.yml` |
+| 10 | OpenTelemetry — Tracing | `10-otel-tracing` | `otel.py` instruments FastAPI; exporter starts as Console (so no new containers yet); **add `trace_id` to every log line** (one line, connects logging ↔ tracing) | `notes_app/otel.py`, `pyproject.toml`, `notes_app/logging_config.py` |
 | 11 | OpenTelemetry — Metrics (Prometheus + Grafana) | `11-otel-metrics` | Prometheus exporter on the app; `prometheus` + `grafana` added to compose; starter dashboard JSON; **one SLO alert on error rate / p95 latency** | `docker-compose.yml`, `grafana/` |
 | 12 | Jaeger for traces | `12-jaeger` | OTLP collector + Jaeger UI in compose; point the exporter at it; view a trace; **incident drill**: kill the DB container / inject latency, find the cause in Jaeger + Grafana, write it up | `docker-compose.yml`, `docs/12-incident-drill.md` |
-| 13 | SigNoz — unified observability | `13-signoz` | SigNoz (free, ClickHouse-based, docker-compose: collector + ClickHouse + UI) replaces the three-tool setup: traces go to the SigNoz collector instead of Jaeger; app log file is collected into SigNoz (log receiver, so `trace_id` in ch.10 links logs↔traces in **one** UI); SLO alert from ch.11 now lives in SigNoz; **re-run the ch.12 incident drill** entirely inside SigNoz — the "three screens → one screen" moment | `docker-compose.yml`, `otel.py`, `docs/13-signoz.md` |
+| 13 | SigNoz — unified observability | `13-signoz` | SigNoz (free, ClickHouse-based, docker-compose: collector + ClickHouse + UI) replaces the three-tool setup: traces go to the SigNoz collector instead of Jaeger; app log file is collected into SigNoz (log receiver, so `trace_id` in ch.10 links logs↔traces in **one** UI); SLO alert from ch.11 now lives in SigNoz; **re-run the ch.12 incident drill** entirely inside SigNoz — the "three screens → one screen" moment | `docker-compose.yml`, `notes_app/otel.py`, `docs/13-signoz.md` |
 | 14 | Tests in CI (formalize) | `14-testing` | Expand the ch.2 smoke test into a full `pytest` suite (API CRUD); wire properly into the Jenkins `test` stage | `tests/`, `Jenkinsfile` |
 | 15 | Full pipeline recap | `15-recap` | Polished `README.md` walkthrough of the whole flow end-to-end; tidy `Makefile` targets (`up`, `down`, `build`, `test`, `deploy`, `pipeline`) | `Makefile`, `README.md` |
 
@@ -147,11 +147,13 @@ can check out any single concept in isolation; `main` is just ch.0 + ch.15's fin
 devops_course/
 ├── PLAN.md                      # this file
 ├── README.md                    # ch.0 intro + ch.15 full walkthrough
-├── main.py                      # FastAPI app instance: mounts routers + templates/static
-├── models.py                    # model layer: in-memory → SQLite → Postgres
-├── views.py                     # controller layer: JSON API + HTML routes
-├── otel.py                      # instrumentation (ch.10+)
-├── logging_config.py            # structured logging (ch.6)
+├── notes_app/                   # the app, as a package (not loose root files)
+│   ├── __init__.py              # package marker + layout note
+│   ├── main.py                  # app instance: mounts routers + templates/static
+│   ├── models.py                # data layer: in-memory → SQLite → Postgres
+│   ├── views.py                 # controller layer: JSON API + HTML routes
+│   ├── otel.py                  # instrumentation (ch.10+)
+│   └── logging_config.py        # structured logging (ch.6)
 ├── templates/                   # Jinja2 UI, one file per page (ch.3+)
 ├── static/                      # CSS/JS (ch.3+)
 ├── tests/                       # placeholder test ch.1, smoke test ch.2, full suite ch.14
