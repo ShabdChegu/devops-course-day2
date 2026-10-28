@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }}{% endblock %}
+
+{% block content %}
+<h2>{{ note.title }}</h2>
+<time class="meta">created {{ note.created_at }}</time>
+<article class="note-body">{{ note.body or "(no body)" }}</article>
+<div class="actions">
+    <a class="cancel" href="/">Back to all notes</a>
+</div>
+{% endblock %}

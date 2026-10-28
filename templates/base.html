@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Notes{% endblock %} · notes-app</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/" class="brand">notes-app</a></h1>
+        <nav>
+            <a href="/">all notes</a>
+            <a href="/new">new note</a>
+        </nav>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>JSON API: <a href="/docs">/docs</a> · this page is a Jinja2 template, the API is JSON — two faces of one dataset.</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+:root {
+  --fg: #1c1c1e;
+  --muted: #6e6e73;
+  --accent: #0a84ff;
+  --card: #f5f5f7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, sans-serif;
+  color: var(--fg);
+  background: #fff;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--card);
+}
+
+.brand { font-size: 1.25rem; color: var(--fg); text-decoration: none; }
+nav a { margin-left: 1rem; color: var(--accent); text-decoration: none; }
+
+main {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.note-list { list-style: none; padding: 0; }
+.note-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--card);
+}
+.note-list a { color: var(--fg); text-decoration: none; font-weight: 500; }
+.meta { color: var(--muted); font-size: 0.85rem; }
+
+.note-form label { display: block; margin-bottom: 0.75rem; }
+.note-form input,
+.note-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.actions { margin-top: 1rem; display: flex; gap: 1rem; align-items: center; }
+button {
+  padding: 0.4rem 1rem;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.cancel { color: var(--muted); text-decoration: none; }
+
+.note-body { white-space: pre-wrap; }
+
+footer {
+  max-width: 42rem;
+  margin: 2rem auto;
+  padding: 1rem 1.5rem 3rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

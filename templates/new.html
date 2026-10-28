@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}New note{% endblock %}
+
+{% block content %}
+<h2>New note</h2>
+<form action="/new" method="post" class="note-form">
+    <label>
+        Title
+        <input type="text" name="title" required autofocus placeholder="Buy milk">
+    </label>
+    <label>
+        Body
+        <textarea name="body" rows="4" placeholder="2L, whole milk"></textarea>
+    </label>
+    <div class="actions">
+        <button type="submit">Save</button>
+        <a class="cancel" href="/">Cancel</a>
+    </div>
+</form>
+{% endblock %}

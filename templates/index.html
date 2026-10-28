@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}All notes{% endblock %}
+
+{% block content %}
+<h2>All notes</h2>
+{% if notes %}
+<ul class="note-list">
+    {% for n in notes %}
+    <li>
+        <a href="/note/{{ n.id }}">{{ n.title }}</a>
+        <time class="meta">{{ n.created_at }}</time>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No notes yet. <a href="/new">Add the first one</a>.</p>
+{% endif %}
+{% endblock %}
