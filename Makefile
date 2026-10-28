@@ -1,6 +1,6 @@
 # DevOps course command surface. Grows one target group per chapter:
 #   ch.0 check+help | ch.1 run/test/lint | ch.4 build | ch.5 up/down
-#   ch.7 pipeline | ch.8 deploy | ch.15 polish
+#   ch.6 logs | ch.7 pipeline | ch.8 deploy | ch.15 polish
 
 IMAGE ?= notes-app
 
@@ -20,6 +20,7 @@ help:
 	@echo "  make down    stop the stack"
 	@echo "  make reset-db  wipe the postgres volume + re-init from .env (drops all notes)"
 	@echo "  make scan    secret scan (the pre-commit hook + CI run this same script)"
+	@echo "  make logs    tail the app's structured (JSON) logs from the stack"
 	@echo "  make help    this list"
 
 # Prerequisites gate - see scripts/check.sh
@@ -96,6 +97,12 @@ reset-db:
 scan:
 	@bash scripts/scan-secrets.sh
 
+# ch.6: follow the app's structured (JSON) logs - the stdout side, which
+# is `docker logs`' road. Ctrl-C stops following. (The rotating FILE side
+# lives on the applogs volume - ch.13 will show it being collected.)
+logs:
+	docker compose --profile core logs -f app
+
 # ch.4: run the *image*, not the local source - the "does the artifact work
 # anywhere?" check. Opposite of `make run` (dev loop, auto-reload, local
 # notes.db): no reload, no local deps, data trapped inside the container
@@ -103,4 +110,4 @@ scan:
 run-docker: build
 	docker run --rm -p 8000:8000 $(IMAGE)
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan
+.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs

@@ -15,7 +15,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .logging_config import setup_logging
 from .views import router
+
+# ch.6: structured logging, one call at startup. main.py is the entry
+# point - so `make run`, the ch.4 container, and Compose's app service all
+# get it, and pytest (which imports the app but never main's body) does
+# not reconfigure logging behind its back.
+setup_logging()
 
 app = FastAPI(title="notes-app")
 app.include_router(router)

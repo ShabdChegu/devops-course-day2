@@ -5,12 +5,17 @@ same model functions - two faces of one dataset. Read the file top to bottom:
 the HTML section is what a browser wants, the JSON section is what a client
 wants. Both call the same `create_note`/`list_notes`/... - the layering from
 ch.1-2 paying off: we added a whole UI and `models.py` never changed.
+
+ch.6: the controllers emit structured log events ("note created/deleted") -
+MVC-correct placement, since the controller is the layer that knows a
+request happened. The *shape* of those lines lives in logging_config.py.
 """
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from .logging_config import log_note_event
 from .models import Note, create_note, delete_note, get_note, list_notes
 
 router = APIRouter()
@@ -44,6 +49,7 @@ def new_note(
 ) -> RedirectResponse:
     """Create a note from the HTML form, then redirect to the fresh note."""
     note = create_note(title, body)
+    log_note_event("created", note.id, note.title)
     return RedirectResponse(url=f"/note/{note.id}", status_code=303)
 
 
@@ -63,6 +69,7 @@ def delete_page(note_id: int) -> RedirectResponse:
     longer exists."""
     if not delete_note(note_id):
         raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    log_note_event("deleted", note_id, "")
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -93,10 +100,13 @@ def read_note(note_id: int) -> Note:
 
 @router.post("/notes", status_code=201, response_model=Note)
 def add_note(payload: NoteIn) -> Note:
-    return create_note(payload.title, payload.body)
+    note = create_note(payload.title, payload.body)
+    log_note_event("created", note.id, note.title)
+    return note
 
 
 @router.delete("/notes/{note_id}", status_code=204)
 def remove_note(note_id: int) -> None:
     if not delete_note(note_id):
         raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    log_note_event("deleted", note_id, "")
