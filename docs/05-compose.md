@@ -41,7 +41,7 @@ Two bigger ideas carry this chapter:
 | `.gitignore` | Now ignores `.env` — **the `.env.example` template is what commits; the real `.env` is yours.** |
 | `scripts/scan-secrets.sh` | New. A secret scan (gitleaks if installed, else a regex for `user:pass@`, `sk-…`, `AKIA…`). Designed to *ignore* compose `${VARS}` but *catch* hardcoded creds. |
 | `.pre-commit-config.yaml` | New. Two local hooks: run the scan, and block a commit that ever tracks a `.env`. |
-| `Makefile` | New `make up` / `make down` (compose, `core` profile, auto-creates `.env` from the example) and `make scan`. |
+| `Makefile` | New `make up` / `make down` (compose, `core` profile, auto-creates `.env` from the example) and `make scan`. `make up` also **verifies the app actually reached `running`** and, if not, prints the pitfall-#1 diagnosis; `make reset-db` is the remedy. |
 | `docs/05-compose.md` | This file. |
 
 New concepts named in the code: **compose service** (a named box in the
@@ -91,32 +91,45 @@ make scan              # should be clean on this repo
 
 ## Common pitfalls
 
-1. **"The app started, then immediately crashed with `could not connect to
-   server`."** → The app was let loose before Postgres was ready. We prevent
-   this with `depends_on: db: condition: service_healthy` — not plain
+1. **`make up` reports success, but the app container `Exited (1)` and
+   nothing answers on `:8000`** → `FATAL: password authentication failed for
+   user "notes"` in the app log. The `.env` password doesn't match the
+   `pgdata` volume. Postgres sets the password **only at the first
+   initialization of an empty volume** (from whatever `.env` existed then);
+   changing `.env` afterwards does *not* re-init an existing volume — so the
+   app (told to use the new password over TCP) can't authenticate and
+   crash-loops at import time, when `create_all` connects. Sneaky detail:
+   `docker compose exec db psql` still "works" because the stock image's
+   local socket is `trust` (never checks a password) — only the app's TCP
+   connection does. Remedy: `make reset-db` (wipes the volume, drops the
+   notes). If keeping data: `ALTER USER` the password instead.
+
+2. **The app starts before Postgres is ready** → We prevent this with
+   `depends_on: db: condition: service_healthy` — not plain
    `depends_on: [db]` (which only waits for *started*, and a Postgres box
    that's "started" can still be refusing connections for a second or two).
 
-2. **`.env` committed and pushed, with a real password.** The single most
+3. **`.env` committed and pushed, with a real password.** The single most
    common secret leak. `make up` auto-creates `.env` from the example on
    first run, but the *password* in there is a placeholder — the pre-commit
    hook blocks committing `.env` itself, and `scan-secrets.sh` catches any
    credential that slips into a *tracked* file. Keep `.env` local, always.
 
-3. **`port is already allocated` / 5432 in use.** Compose publishes Postgres
+4. **`port is already allocated` / 5432 in use.** Compose publishes Postgres
    on host `5432`. If a real Postgres is running on the host, clash.
    `make check` names the holder; either stop it or remap the port in the
    compose file (`"127.0.0.1:5433:5432"`).
 
-4. **App can't reach DB: "db" — name resolves fine locally, fails in CI.**
+5. **App can't reach DB: "db" — name resolves fine locally, fails in CI.**
    Service-name DNS only exists *on the compose network*. From the host you
    use the published port; from another container on the same network you
    use the name. Mixing those two is the classic "works on my laptop" bug.
 
-5. **`make down` "loses" the database.** `make down` (`docker compose down`)
+6. **`make down` "loses" the database.** `make down` (`docker compose down`)
    stops the containers but *keeps the named volume* by default, so the data
-   survives. To truly wipe: `docker volume rm devops_course_pgdata` — and
-   that's a deliberate, scary act, which is the point.
+   survives. To truly wipe: `make reset-db` (= `down -v` + re-init) or
+   `docker volume rm devops_course_pgdata` — deliberate, scary acts, which
+   is the point.
 
 ## Stretch exercise
 
@@ -162,9 +175,9 @@ filesystem is ephemeral — the same trap ch.4 left you on purpose.)
    removes containers but not named volumes.
 5. `${POSTGRES_USER}` is a *reference to a secret*, not a secret — its value
    lives in the local `.env`, which never ships. A hardcoded
-   `bob:hunter2@` is a secret that *would* ship in the image/repo. Flagging
-   the reference would make students distrust a tool that cries wolf;
-   flagging the real credential is the value.
+   username:password embedded in a connection string *is* a secret that
+   would ship in the image/repo. Flagging the reference would make students
+   distrust a tool that cries wolf; flagging the real credential is the value.
 
 </details>
 
