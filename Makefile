@@ -10,8 +10,9 @@ help:
 	@echo "DevOps course - available commands"
 	@echo ""
 	@echo "  make check   verify prerequisites (tools, docker daemon, free ports)"
-	@echo "  make run     start the app on :8000 (dev, auto-reload)"
+	@echo "  make run     start the app on :8000 locally (dev, auto-reload)"
 	@echo "  make build   build the Docker image (tag: notes-app)"
+	@echo "  make run-docker  run the built image on :8000 (validates the artifact)"
 	@echo "  make test    run the test suite"
 	@echo "  make lint    ruff check + format check"
 	@echo "  make lint-fix  ruff auto-fix + format"
@@ -36,4 +37,11 @@ lint:
 build:
 	docker build -t $(IMAGE) .
 
-.PHONY: help check run test lint lint-fix build
+# ch.4: run the *image*, not the local source - the "does the artifact work
+# anywhere?" check. Opposite of `make run` (dev loop, auto-reload, local
+# notes.db): no reload, no local deps, data trapped inside the container
+# (the exact problem ch.5's compose + volume solves).
+run-docker: build
+	docker run --rm -p 8000:8000 $(IMAGE)
+
+.PHONY: help check run test lint lint-fix build run-docker

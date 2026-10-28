@@ -47,8 +47,13 @@ From a clean checkout of `04-docker`:
 ```bash
 make check            # confirms docker daemon is up
 make build            # docker build -t notes-app .   (first run pulls layers; later ones are fast)
-docker run --rm -p 8000:8000 notes-app
+make run-docker       # docker run --rm -p 8000:8000 notes-app   (builds first if needed, blocks until stopped)
 ```
+
+`make run` and `make run-docker` are *deliberately different*: the first is
+your dev loop (auto-reload, your local `notes.db`, edits land instantly);
+the second validates the **artifact** — "would this image work on a machine
+that only has docker?" That contrast *is* the chapter.
 
 In a second terminal, hit the running container:
 
@@ -63,14 +68,14 @@ Then the lesson that makes it real — **the data is inside the container, not
 on your machine**:
 
 ```bash
-# (the container is still running from docker run above, in the other terminal)
-docker ps --format '{{.Names}}'        # find it (anonymous name)
-docker exec <id> sh -c 'cat /app/notes.db'   # your rows, on the container's filesystem
+# (make run-docker is still blocking in the other terminal - find its container by image)
+docker ps -q --filter ancestor=notes-app      # the anonymous container id
+docker exec <id> sh -c 'ls -la /app/notes.db'   # your rows, on the container's filesystem
 ```
 
 ```bash
-# stop it, then delete it
-docker stop <id> && docker rm <id>
+# stop it (Ctrl-C in the make run-docker terminal), then remove it
+docker rm $(docker ps -aq --filter ancestor=notes-app | tr '\n' ' ') 2>/dev/null; true
 ```
 
 Now run it again and `GET /notes` — **empty.** The rows were on the
