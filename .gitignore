@@ -13,3 +13,9 @@ __pycache__/
 *.db
 *.sqlite3
 logs/
+
+# course planning kept local-only (author's map; students follow docs/)
+PLAN.md
+
+# secrets live locally (ch.5's story: only .env.example ships)
+.env
