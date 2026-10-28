@@ -27,6 +27,10 @@ tests/
 scripts/
 Makefile
 
+# Secrets (ch.5): .env is machine-local; it is NOT inherited into the
+# build context or the image. .env.example ships only in git, never here.
+.env
+
 # The course's own container stacks (ch.5+)
 docker/
 docker-compose.yml

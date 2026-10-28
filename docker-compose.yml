@@ -1,0 +1,57 @@
+# ch.5 - one command starts the app AND a real database.
+#
+#   make up      # docker compose --profile core up -d --build
+#   make down    # docker compose down
+#
+# Profiles bound the footprint (PLAN item #3): `core` = app + db, and
+# everything later chapters add (jenkins ch.7, monitoring ch.11, jaeger
+# ch.12, signoz ch.13) gets its OWN profile so a 4GB laptop never has to
+# run all of it. `make up` starts core only, by design.
+
+services:
+  app:
+    build: .
+    image: notes-app
+    profiles: ["core"]
+    depends_on:
+      # The app creates its tables at import time - so Postgres must be
+      # accepting connections first. `service_healthy` (not just "started")
+      # is what makes this reliable.
+      db:
+        condition: service_healthy
+    environment:
+      # The ch.2 seam pays off: models.py builds its engine from DATABASE_URL.
+      # Point it at Postgres here and NOT ONE LINE OF PYTHON CHANGES.
+      # Note the driver dialect `postgresql+psycopg` - SQLAlchemy needs the
+      # driver named in the URL (that's why `uv add psycopg` happened).
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    ports:
+      - "8000:8000"
+
+  db:
+    image: postgres:16-alpine
+    profiles: ["core"]
+    # .env (yours, gitignored - see .env.example) feeds these interpolations.
+    # Compose reads .env to fill in ${...} in THIS file; the containers
+    # themselves never see the raw .env - app gets only DATABASE_URL,
+    # db gets only its three POSTGRES_* vars.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Named volume = the data OUTLIVES the container. ch.4's
+      # "docker rm loses everything" problem, solved for good.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready: "is Postgres accepting connections?" - the exact
+      # question depends_on above is waiting on.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    ports:
+      - "5432:5432" # so you can psql into it from the host; `make check` verifies 5432 is free first
+
+volumes:
+  pgdata:

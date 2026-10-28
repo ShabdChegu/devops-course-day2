@@ -1,0 +1,33 @@
+# ch.5's secrets habit, automated. Install once:
+#     uv run pre-commit install
+# After that, every `git commit` runs these hooks and blocks a commit
+# that leaks a secret. ch.7 wires the SAME scripts/scan-secrets.sh into
+# CI, so a leak is caught at commit time AND at pipeline time.
+#
+# The hooks here are system-local (no Python mirror of the tooling the
+# course already uses): the secret scan and a "did you commit a .env?"
+# guard. Keep the hook list short - five hooks is a habit, twenty is
+# friction students give up on.
+
+repos:
+  - repo: local
+    hooks:
+      - id: scan-secrets
+        name: scan-secrets (regex, or gitleaks if installed)
+        entry: bash scripts/scan-secrets.sh
+        language: system
+        # Scan every tracked file - a secret can sit on any branch, and
+        # pre-commit runs from the repo root.
+        pass_filenames: false
+        always_run: true
+
+      - id: no-env-commit
+        name: refuse committing a real .env
+        description: "blocks a commit if .env ever ends up TRACKED in git"
+        # The whole command is one YAML double-quoted string; the inner
+        # double quotes are escaped - an unquoted multi-word bash -c is the
+        # classic "mapping values are not allowed" config error.
+        entry: "bash -c \"if git ls-files --error-unmatch .env >/dev/null 2>&1; then echo 'BLOCKED: .env is tracked in git - it is gitignored by design, only .env.example ships. Untrack it: git rm --cached .env' >&2; exit 1; fi; exit 0\""
+        language: system
+        pass_filenames: false
+        always_run: true
