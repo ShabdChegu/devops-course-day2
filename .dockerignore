@@ -1,0 +1,37 @@
+# Anything that is NOT part of the container image.
+# .dockerignore governs the *build context* - what Docker sends to the
+# daemon for each `docker build`. Two jobs: keep builds fast (smaller
+# context) and keep secrets/local state OUT of images.
+
+# Version control & course scaffolding - never belongs in an image
+.git/
+.github/
+*.md
+docs/
+
+# Python / uv local state
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local databases & logs - notes.db is per-machine state, not part of the
+# app (ch.5 gives the container a real database service instead)
+*.db
+*.sqlite3
+logs/
+
+# Dev-only tooling
+tests/
+scripts/
+Makefile
+
+# The course's own container stacks (ch.5+)
+docker/
+docker-compose.yml
+
+# Editor & OS noise
+.idea/
+.vscode/
+.DS_Store

@@ -2,6 +2,8 @@
 #   ch.0 check+help | ch.1 run/test/lint | ch.4 build | ch.5 up/down
 #   ch.7 pipeline | ch.8 deploy | ch.15 polish
 
+IMAGE ?= notes-app
+
 .DEFAULT_GOAL := help
 
 help:
@@ -9,6 +11,7 @@ help:
 	@echo ""
 	@echo "  make check   verify prerequisites (tools, docker daemon, free ports)"
 	@echo "  make run     start the app on :8000 (dev, auto-reload)"
+	@echo "  make build   build the Docker image (tag: notes-app)"
 	@echo "  make test    run the test suite"
 	@echo "  make lint    ruff check + format check"
 	@echo "  make lint-fix  ruff auto-fix + format"
@@ -28,7 +31,9 @@ test:
 lint:
 	uv run ruff check . && uv run ruff format --check .
 
-lint-fix:
-	uv run ruff check --fix . && uv run ruff format .
+# ch.4: build the container image. .dockerignore trims the build context;
+# the lockfile makes the install reproducible.
+build:
+	docker build -t $(IMAGE) .
 
-.PHONY: help check run test lint lint-fix
+.PHONY: help check run test lint lint-fix build
