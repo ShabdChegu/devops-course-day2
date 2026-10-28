@@ -56,6 +56,16 @@ def show_page(request: Request, note_id: int):
     return _render(request, "show.html", note=note)
 
 
+@router.post("/note/{note_id}/delete")
+def delete_page(note_id: int) -> RedirectResponse:
+    """HTML delete: forms can't send DELETE verbs, so the show page POSTs
+    here. Same PRG pattern as /new - redirect home, not to a page that no
+    longer exists."""
+    if not delete_note(note_id):
+        raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    return RedirectResponse(url="/", status_code=303)
+
+
 # ---------------------------------------------------------------------------
 # JSON face (ch.1) - the API a client calls; unchanged in behavior
 # ---------------------------------------------------------------------------

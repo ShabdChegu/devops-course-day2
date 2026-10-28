@@ -54,6 +54,20 @@ def test_html_flow():
     assert new_id in ids
 
 
+def test_html_delete():
+    """Delete through the show page's button: POST /note/{id}/delete
+    (forms can't send DELETE verbs) - 303 home, then gone on both faces."""
+    r = client.post("/notes", json={"title": "doomed", "body": ""})
+    note_id = r.json()["id"]
+
+    d = client.post(f"/note/{note_id}/delete", follow_redirects=False)
+    assert d.status_code == 303
+    assert d.headers["location"] == "/"
+
+    assert client.get(f"/note/{note_id}").status_code == 404
+    assert client.get(f"/notes/{note_id}").status_code == 404
+
+
 def test_missing_note_is_404_on_both_faces():
     assert client.get("/note/999999").status_code == 404
     assert client.get("/notes/999999").status_code == 404

@@ -34,7 +34,7 @@ Both faces call the *same* `create_note` / `list_notes`. The form on the
 | `templates/base.html` | New. The layout: header, nav, `<main>` block, footer, static asset links. Every page extends it — one place to change the look. |
 | `templates/index.html` | New. "All notes" page — loops the list, empty state, link to each note. |
 | `templates/new.html` | New. The create form (`<form action="/new" method="post">`). |
-| `templates/show.html` | New. A single note, titled by its own title. |
+| `templates/show.html` | New. A single note, titled by its own title, plus a **Delete** button (POSTs `/note/{id}/delete` — forms can't send DELETE verbs). |
 | `static/style.css`, `static/app.js` | New. A minimal stylesheet and a *deliberately tiny* JS file. The JS is not decoration: it proves static file serving works and gives ch.3 a visible "static assets" concept in one line. |
 | `notes_app/main.py` | Learned to serve HTML: mounts `Jinja2Templates` + `StaticFiles` at the repo-root `templates/` & `static/` directories, and stashes them on `app.state` for views. |
 | `notes_app/views.py` | **Grew, didn't rewrite.** The JSON routes are unchanged; a new HTML section above them renders the four pages. `POST /new` accepts form data (`Form(...)`) and 303-redirects to the new note (the PRG pattern — POST/Redirect/Get — so a refresh after submit doesn't re-post). |
@@ -104,11 +104,12 @@ Finally: `make test` — six tests, both covered.
 ## Stretch exercise
 
 Add a `/note/{id}/edit` page: a second `<form>` pre-filled with the
-note's title and body that `POST`s back to itself and 303s to the show page.
-Three new files/routes, zero model changes — and `delete_note` was already
-waiting in `models.py`, so add a "delete" button on the show page that
-submits a `POST /note/{id}/delete` and redirects home. If you need to touch
-`models.py` at all, stop: that's the layering rule breaking.
+note's title and body that `POST`s to `/note/{id}/edit` (reusing the
+303-redirect pattern) and lands back on the show page. Zero model changes —
+the same "if you need to touch `models.py`, stop" layering rule applies,
+and study how `POST /note/{id}/delete` (already in `views.py`) does
+*verb-in-the-URL* for HTML: forms can only GET/POST, so destructive actions
+arrive as POSTs whose path says what they are.
 
 ## Self-check quiz
 

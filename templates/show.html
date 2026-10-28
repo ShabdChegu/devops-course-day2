@@ -7,5 +7,13 @@
 <article class="note-body">{{ note.body or "(no body)" }}</article>
 <div class="actions">
     <a class="cancel" href="/">Back to all notes</a>
+    <form
+        method="post"
+        action="/note/{{ note.id }}/delete"
+        class="inline"
+        onsubmit="return confirm('Delete this note?')"
+    >
+        <button type="submit" class="danger">Delete</button>
+    </form>
 </div>
 {% endblock %}

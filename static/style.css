@@ -63,6 +63,8 @@ button {
   font: inherit;
   cursor: pointer;
 }
+.inline { display: inline; }
+button.danger { background: #ff3b30; }
 .cancel { color: var(--muted); text-decoration: none; }
 
 .note-body { white-space: pre-wrap; }
