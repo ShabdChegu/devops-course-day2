@@ -101,8 +101,14 @@ make scan              # should be clean on this repo
    crash-loops at import time, when `create_all` connects. Sneaky detail:
    `docker compose exec db psql` still "works" because the stock image's
    local socket is `trust` (never checks a password) — only the app's TCP
-   connection does. Remedy: `make reset-db` (wipes the volume, drops the
-   notes). If keeping data: `ALTER USER` the password instead.
+   connection does.
+
+   **A fresh clone never hits this** — no volume means first init reads
+   your `.env`, so the passwords match by construction. You only hit it by
+   *changing* `.env` after the volume already exists. Remedy: `make reset-db`
+   (wipes the volume, drops the notes). The data-preserving alternative is
+   one manual line in the db service: `ALTER USER <user> PASSWORD '<new>';`
+   — the only manual psql in this whole course, and only for that case.
 
 2. **The app starts before Postgres is ready** → We prevent this with
    `depends_on: db: condition: service_healthy` — not plain
