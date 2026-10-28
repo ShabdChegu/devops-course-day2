@@ -14,8 +14,3 @@ from pathlib import Path
 # so a half-finished run can't corrupt the one the app uses.
 _tmp_db_dir = tempfile.mkdtemp(prefix="notes-test-db-")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_tmp_db_dir) / 'test-notes.db'}"
-
-# ch.6: logging_config.py also reads LOG_FILE at import time. Point the
-# test run at the temp dir too, so `make test` never writes logs/ into the
-# repo (the app's default, when run via make run / compose, is logs/).
-os.environ["LOG_FILE"] = f"{_tmp_db_dir}/test-notes.log"

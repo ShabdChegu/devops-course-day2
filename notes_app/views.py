@@ -6,17 +6,21 @@ the HTML section is what a browser wants, the JSON section is what a client
 wants. Both call the same `create_note`/`list_notes`/... - the layering from
 ch.1-2 paying off: we added a whole UI and `models.py` never changed.
 
-ch.6: the controllers emit structured log events ("note created/deleted") -
-MVC-correct placement, since the controller is the layer that knows a
-request happened. The *shape* of those lines lives in logging_config.py.
+ch.6: the controllers log the two business events ("note created/deleted").
+The *shape* of every line (JSON, one object per line) lives in
+logging_config.py; the controller just says what happened, with fields in
+`extra=` - those ride into the JSON object by name.
 """
+
+import logging
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from .logging_config import log_note_event
 from .models import Note, create_note, delete_note, get_note, list_notes
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -49,7 +53,7 @@ def new_note(
 ) -> RedirectResponse:
     """Create a note from the HTML form, then redirect to the fresh note."""
     note = create_note(title, body)
-    log_note_event("created", note.id, note.title)
+    logger.info("note created", extra={"event": "note_created", "note_id": note.id})
     return RedirectResponse(url=f"/note/{note.id}", status_code=303)
 
 
@@ -69,7 +73,7 @@ def delete_page(note_id: int) -> RedirectResponse:
     longer exists."""
     if not delete_note(note_id):
         raise HTTPException(status_code=404, detail=f"note {note_id} not found")
-    log_note_event("deleted", note_id, "")
+    logger.info("note deleted", extra={"event": "note_deleted", "note_id": note_id})
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -101,7 +105,7 @@ def read_note(note_id: int) -> Note:
 @router.post("/notes", status_code=201, response_model=Note)
 def add_note(payload: NoteIn) -> Note:
     note = create_note(payload.title, payload.body)
-    log_note_event("created", note.id, note.title)
+    logger.info("note created", extra={"event": "note_created", "note_id": note.id})
     return note
 
 
@@ -109,4 +113,4 @@ def add_note(payload: NoteIn) -> Note:
 def remove_note(note_id: int) -> None:
     if not delete_note(note_id):
         raise HTTPException(status_code=404, detail=f"note {note_id} not found")
-    log_note_event("deleted", note_id, "")
+    logger.info("note deleted", extra={"event": "note_deleted", "note_id": note_id})

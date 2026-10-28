@@ -97,9 +97,8 @@ reset-db:
 scan:
 	@bash scripts/scan-secrets.sh
 
-# ch.6: follow the app's structured (JSON) logs - the stdout side, which
-# is `docker logs`' road. Ctrl-C stops following. (The rotating FILE side
-# lives on the applogs volume - ch.13 will show it being collected.)
+# ch.6: follow the app's structured (JSON) logs - a container's logs live
+# on stdout, and `docker compose logs` is how you read them. Ctrl-C stops.
 logs:
 	docker compose --profile core logs -f app
 

@@ -18,14 +18,6 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm
 RUN groupadd -g 65532 courseuser && \
     useradd -u 65532 -g courseuser -m -d /app -s /sbin/nologin courseuser
 
-# ch.6: the app writes a rotating log to /app/logs (LOG_FILE). The compose
-# stack mounts a *named volume* there - and Docker seeds a brand-new volume
-# from the image's dir at that path, so it must already exist AND be owned
-# by courseuser, or the first `make up` hits "PermissionError: /app/logs/
-# notes.log" (root-owned volume, non-root app). chown -R before switching
-# user so the mount inherits the right owner.
-RUN mkdir -p /app/logs && chown -R courseuser:courseuser /app/logs
-
 USER 65532
 WORKDIR /app
 

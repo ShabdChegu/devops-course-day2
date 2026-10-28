@@ -1,40 +1,52 @@
-"""ch.6's test: the log CONTRACT, not just the logging.
+"""ch.6's test: the log CONTRACT, not just "did it log".
 
-The whole point of structured logging is that every line an app emits is
-a JSON object a *machine* can parse. So this test doesn't check "did we
-log" - it checks "can the log be parsed", which is what ch.7's CI,
-ch.13's SigNoz receiver, and any `jq` you run by hand will actually do.
-
-conftest.py points LOG_FILE at a temp dir before notes_app imports, so
-this reads the file the test run itself wrote - never the repo's logs/.
+The whole point of structured logging is that every line the app emits is a
+JSON object a *machine* can parse. What `make logs` (and ch.13's collector)
+reads is exactly `JsonFormatter`'s output - so this test attaches a handler
+that runs records through the *same* formatter the app uses, and asserts
+every resulting line json.loads()s.
 """
 
 import json
-import os
-from pathlib import Path
+import logging
 
 from fastapi.testclient import TestClient
 
-from notes_app.main import app
+from notes_app import main  # noqa: F401 - importing main runs setup_logging()
+from notes_app.logging_config import JsonFormatter
 
-client = TestClient(app)
+client = TestClient(main.app)
+
+
+class _Capture(logging.Handler):
+    """Collects formatted log lines exactly as the app's stdout handler does."""
+
+    def __init__(self):
+        super().__init__()
+        self.lines: list[str] = []
+        self.setFormatter(JsonFormatter())
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lines.append(self.format(record))
 
 
 def test_every_log_line_is_a_valid_json_object():
-    log_file = Path(os.environ["LOG_FILE"])
+    cap = _Capture()
+    root = logging.getLogger()
+    root.addHandler(cap)
+    try:
+        r = client.post("/notes", json={"title": "log me", "body": "into json"})
+        assert r.status_code == 201
+    finally:
+        root.removeHandler(cap)
 
-    # Trigger our own structured event through the API (not a stray log):
-    r = client.post("/notes", json={"title": "log me", "body": "into json"})
-    assert r.status_code == 201
-
-    lines = [ln for ln in log_file.read_text().splitlines() if ln.strip()]
-    assert lines, "expected log lines in the rotating file"
+    lines = [ln for ln in cap.lines if ln.strip()]
+    assert lines, "expected log lines from the request"
 
     for line in lines:
         entry = json.loads(line)  # <- the whole contract: every line parses
-        # ...and it has the fields a pipeline would query:
         assert {"time", "level", "logger", "message"} <= entry.keys()
 
-    # ...and our business event is there with queryable fields:
-    events = [json.loads(ln) for ln in lines if '"note_created"' in ln]
+    # ...and our business event is there, with a queryable field:
+    events = [json.loads(ln) for ln in lines if "note_created" in ln]
     assert events and events[-1]["note_id"] == r.json()["id"]

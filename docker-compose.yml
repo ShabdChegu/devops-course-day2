@@ -25,14 +25,10 @@ services:
       # Note the driver dialect `postgresql+psycopg` - SQLAlchemy needs the
       # driver named in the URL (that's why `uv add psycopg` happened).
       DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
-      # ch.6: the app's rotating log file lives on a named volume - the ch.4
-      # rule "state that must outlive the container goes on a volume"
-      # applied to logs, not just the database.
-      LOG_FILE: /app/logs/notes.log
+      # ch.6: the log level knob - behavior from the environment, not code.
+      LOG_LEVEL: INFO
     ports:
       - "8000:8000"
-    volumes:
-      - applogs:/app/logs
 
   db:
     image: postgres:16-alpine
@@ -61,4 +57,3 @@ services:
 
 volumes:
   pgdata:
-  applogs: # ch.6 - the app's rotating log file (see app: LOG_FILE + volumes)
