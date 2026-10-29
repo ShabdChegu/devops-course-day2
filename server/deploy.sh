@@ -32,6 +32,10 @@ REPO_DIR="$(dirname "$HERE")"
 if [ -f "$REPO_DIR/.env" ]; then set -a; . "$REPO_DIR/.env"; set +a; fi
 SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
 SERVER_PORT="${SERVER_PORT:-8000}"
+# Track whether the caller (or .env) EXPLICITLY set BOX_DIR - that's the
+# only case where its literal value is safe to ship over ssh (see the
+# remote branch below; the default $HOME is OUR home, not the box's).
+[ -n "${BOX_DIR:-}" ] && BOX_DIR_SET=yes
 BOX_DIR="${BOX_DIR:-$HOME/devops-course-server}"
 
 # $1 = the image reference to run: ch.7's pushed tag
@@ -58,6 +62,19 @@ else
   SSH_TARGET="$SERVER_HOST"
   [ -n "${SERVER_USER:-}" ] && SSH_TARGET="$SERVER_USER@$SERVER_HOST"
 
+  # THE "one script, two machines" trap: BOX_DIR's default expands $HOME on
+  # whichever side runs deploy.sh - but the remote command runs in the BOX's
+  # shell, where $HOME is the box user's home (where bootstrap.sh cloned).
+  # So when we cross the wire, the box's $HOME must be what expands, not ours
+  # (ours is /var/jenkins_home in the pipeline; build #1 of notes-pipeline-CD
+  # cd'd into it and failed). Only when BOX_DIR was set EXPLICITLY do we ship
+  # that literal; otherwise send a \$HOME that expands on the box.
+  if [ -n "${BOX_DIR_SET:-}" ]; then
+    BOX_REMOTE="$BOX_DIR"
+  else
+    BOX_REMOTE='\$HOME/devops-course-server'
+  fi
+
   if [ -n "${WORKSPACE:-}" ]; then
     # THE PIPELINE: never prompts (a hung pipeline is the failure mode),
     # host keys from a SEEDED file (WORKSPACE persists on the jenkins_home
@@ -75,7 +92,19 @@ else
   fi
   [ -n "${DEPLOY_SSH_KEY_FILE:-}" ] && SSH_OPTS="$SSH_OPTS -i $DEPLOY_SSH_KEY_FILE"
 
-  remote_cmd="cd '$BOX_DIR' && env APP_IMAGE=$IMAGE docker compose -f server/docker-compose.yml $UPSPEC"
+  # BOX_REMOTE (not BOX_DIR) is what the BOX's shell must expand: the default
+  # value carries a LITERAL backslash before $ (BOX_REMOTE='\$HOME/...'), so
+  # that it survives the two expansions it passes through - the sh -c that
+  # runs deploy_cmd (backslash drops, $HOME stays literal text for ssh) and
+  # then the box's own shell (where $HOME finally expands, to ITS home).
+  # No single quotes around it: they would ship a literal $HOME/... to the box.
+  #
+  # --env-file .env, not rely on compose's auto-load: compose v2 auto-loads a
+  # .env from the PROJECT directory - the first compose file's directory
+  # (server/), NOT the working directory. The box's .env sits at the CLONE
+  # root, so without --env-file the POSTGRES_* interpolate to blank and the
+  # db's init dies "superuser password is not specified" (docs/08 pitfall #4).
+  remote_cmd="cd $BOX_REMOTE && env APP_IMAGE=$IMAGE docker compose -f server/docker-compose.yml --env-file .env $UPSPEC"
   deploy_cmd="ssh $SSH_OPTS $SSH_TARGET \"$remote_cmd\""
   verify_cmd="ssh $SSH_OPTS $SSH_TARGET \"curl -sf -o /dev/null http://127.0.0.1:$SERVER_PORT/notes\""
 fi
@@ -102,6 +131,8 @@ else
   echo "deploy: FAILED - the container started but the app is not answering"
   echo "       (docs/08 pitfall #2): logs: on the box run"
   [ "$is_local" = "yes" ] && echo "       docker logs \$(docker compose -f $REPO_DIR/docker-compose.yml ps -q app)"
-  [ "$is_local" = "no" ] && echo "       ssh $SSH_TARGET 'cd $BOX_DIR && docker compose -f server/docker-compose.yml logs --tail 20 app'"
+  # The hint shows the BOX-side path (its \$HOME, not ours) - strip BOX_REMOTE's
+  # escape backslash for display: BOX_REMOTE_DISPLAY='$HOME/devops-course-server'.
+  [ "$is_local" = "no" ] && echo "       ssh $SSH_TARGET 'cd ${BOX_REMOTE//\\/} && docker compose -f server/docker-compose.yml --env-file .env logs --tail 20 app'"
   exit 1
 fi
