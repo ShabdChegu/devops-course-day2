@@ -31,11 +31,21 @@ rebuild or check out the later branches and you'll watch it grow.
 
 ```mermaid
 flowchart LR
-    app["notes app<br/>(running locally, in-memory store)"]
+    gh["GitHub"]
+    jenkins["jenkins (course-jenkins)"]
+    dockerd["host docker daemon"]
+    hub["Docker Hub"]
+    app["app + postgres<br/>(core profile)"]
+
+    gh -->|"Poll SCM H/5"| jenkins
+    jenkins -->|"docker build/push via socket"| dockerd
+    jenkins --> hub
+    jenkins -.->|"ch.8: pull + run"| app
 ```
 
-*As of ch.0: a single app, running locally. From ch.4 onward each chapter doc
-shows this same diagram updated — Docker container, Postgres, CI, observability.*
+*As of ch.7: a push to GitHub fires the pipeline, which lints, scans, tests,
+builds on the host daemon and pushes to Docker Hub. Each chapter's doc shows
+this same diagram at its own snapshot.*
 
 ## Branch map
 | # | Branch | Concept |
@@ -47,7 +57,7 @@ shows this same diagram updated — Docker container, Postgres, CI, observabilit
 | 4 | `04-docker` | Dockerfile (uv-based) |
 | 5 | `05-compose` | Docker Compose + Postgres + profiles + secrets story |
 | 6 | `06-logging` | Structured (JSON) logging |
-| 7 | `07-jenkins-ci` | Jenkins CI pipeline (in Docker) |
+| 7 | `07-jenkins-ci` | Jenkins CI pipeline (in Docker): poll on push → lint/scan/test/build → push to Docker Hub |
 | 8 | `08-jenkins-cd` | Deploy stage, image tag = git SHA |
 | 9 | `09-health` | `/health`, `/ready`, container healthchecks |
 | 10 | `10-otel-tracing` | OpenTelemetry tracing, trace_id in logs |
