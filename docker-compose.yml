@@ -60,36 +60,49 @@ services:
   # push. That's what "CI" means here: a machine notices your commit before
   # you remember to run it.
   #
-  #   make pipeline   # up this profile + seed the job (zero UI clicks)
+  #   make pipeline   # build the course-jenkins image + start this profile
   #
-  # The ch.7 gotcha, documented (docs/07-jenkins-ci.md pitfall #1): the
-  # pipeline needs `docker build` and `uv` - neither is in this image.
-  # The host-socket mount drives the HOST's docker daemon; the host's tools
-  # fill the gap. Same mount later carries to the VPS deploy in ch.8.
+  # `build:` - course-jenkins = stock Jenkins + uv + the docker CLI
+  # (jenkins/Dockerfile). The pipeline's stages run on the controller
+  # itself (the Jenkinsfile says `node`), so the controller container must
+  # carry every tool a stage uses: uv for lint/test, the docker CLI for
+  # the build stage - and that docker only reaches a daemon through the
+  # socket mount below.
+  #
+  # The ch.7 gotcha (docs/07-jenkins-ci.md pitfall #1), one line:
+  # /var/run/docker.sock -> the HOST's daemon, visible from in here. No
+  # DinD: no second daemon hiding inside a box.
   jenkins:
-    image: jenkins/jenkins:2.580.2-lts
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+    image: course-jenkins
     profiles: ["jenkins"]
+    # The controller must survive a stop/restart of its own - a CI box that
+    # vanishes when a pipeline POSTs /restart is useless. (A student POSTing
+    # /restart with a stale crumb, or a reboot, would otherwise kill it.)
+    restart: unless-stopped
+    # Root, deliberately: the host's docker socket is only usable by the
+    # host's root. Production Jenkins would not run as root - the course
+    # says so in docs/07 pitfall #5.
+    user: "0"
     environment:
-      # The host-socket's host: this container's `$HOME` is where the
-      # pipeline's uv caches land, and where .env (the app password, ch.5)
-      # is found. The Jenkinsfile mounts it explicitly.
-      HOME: /var/jenkins_home
       JENKINS_PORT: 8080
       JENKINS_SLAVE_AGENT_PORT: 50000
-    # --user root matters: the host-socket is owned by the host's root,
-    # and the pipeline's stages run as root inside this container too.
-    user: "0"
+      # HOME -> the volume, not /root: uv's wheel cache, its managed
+      # Python, and every stage's .venv then live on jenkins_home - so
+      # build #2 of any pipeline is minutes faster than build #1, and
+      # nothing the pipeline does is thrown away when the container is.
+      HOME: /var/jenkins_home
     volumes:
-      # JENKINS_HOME on a NAMED volume: jobs, credentials, and uv's wheel
-      # cache survive a container rebuild. ch.8's VPS gets the same.
+      # JENKINS_HOME on a NAMED volume: your FIRST run installs the two
+      # plugin families + creates the job (docs/07 "Try it yourself"); that
+      # setup - and every workspace's .venv - persists HERE, so later
+      # `make pipeline` boots straight into a working Jenkins. ch.8's VPS
+      # gets the same volume: that IS the "move Jenkins to a server" diff.
       - jenkins_home:/var/jenkins_home
-      # The gotcha itself, one line: the host daemon, visible from in here.
+      # THE gotcha: the host daemon, visible from in here.
       - /var/run/docker.sock:/var/run/docker.sock
-      # The pipeline checks the repo OUT of the host's clone, under /opt:
-      # the poller and the checkout share one origin, so a push to a
-      # FORK still fires (Jenkins polls the clone URL you give it - the
-      # Jenkinsfile's SCM is set in scripts/jenkins-init.sh, not here).
-      - /opt/course:/opt/course
     ports:
       # 13000 on the host -> 8080 in the container (Jenkins' default).
       # `make check` verifies 13000 is free first.

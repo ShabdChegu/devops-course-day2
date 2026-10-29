@@ -109,4 +109,37 @@ logs:
 run-docker: build
 	docker run --rm -p 8000:8000 $(IMAGE)
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs
+# ch.7: the CI controller, in Docker. `--build` also builds the
+# course-jenkins image (stock Jenkins + uv + docker CLI, jenkins/Dockerfile),
+# so this one target converges a fresh machine: nothing pre-cached needed.
+#
+# First run is the one-time setup (docs/07-jenkins-ci.md "Try it yourself"):
+# http://127.0.0.1:13000 -> install the two plugin families (git,
+# workflow-aggregator) -> create the notes-pipeline job (Pipeline from SCM,
+# this repo + branch, Poll SCM H/5). Everything you set up then lives in
+# the jenkins_home volume, so re-runs of this target just work.
+pipeline:
+	docker compose --profile jenkins up -d --build
+	@echo "waiting for Jenkins to finish booting (first boot of a fresh volume ~60-120s)..."
+	@cid=$$(docker compose --profile jenkins ps -q jenkins | head -1); \
+	ok=no; \
+	for i in $$(seq 1 45); do \
+		if docker logs "$$cid" 2>&1 | grep -q "Jenkins is fully up and running"; then ok=yes; break; fi; \
+		case "$$(docker inspect --format '{{.State.Status}}' "$$cid" 2>/dev/null)" in exited|dead) break;; esac; \
+		sleep 4; \
+	done; \
+	if [ "$$ok" = "yes" ]; then \
+		echo "jenkins up: http://127.0.0.1:13000"; \
+		echo ""; \
+		echo "first run? do the one-time setup (docs/07-jenkins-ci.md, 'Try it yourself'):"; \
+		echo "  1. install-plugins: git, workflow-aggregator (restart when asked)"; \
+		echo "  2. new item -> notes-pipeline -> Pipeline"; \
+		echo "  3. Define pipeline: Pipeline script from SCM, repo + branch 07-jenkins-ci"; \
+		echo "  4. triggers -> Poll SCM: H/5   (save, Build now -> green)"; \
+		echo "   -> push a commit and a build fires within ~5 min. Re-run 'make pipeline' later: it just works."; \
+	else \
+		echo "!! jenkins did not come up (container state: $$(docker inspect --format '{{.State.Status}}' "$$cid" 2>/dev/null))."; \
+		echo "   log tail:"; docker logs --tail 10 "$$cid" 2>&1; exit 1; \
+	fi
+
+.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs pipeline
