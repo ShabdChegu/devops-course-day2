@@ -61,7 +61,8 @@ of truth you can read, diff, and review like any other code.
 |------|--------|
 | `Jenkinsfile` | New. A **declarative** pipeline: `triggers` (installs the Poll SCM trigger) + `options` + `Sync`, parallel `Checks` (Lint/Scan/Test), Build, Trivy Gate, Push — plus a `post` block. `agent any` means "run on the **controller** itself"; no agents, no DinD. |
 | `jenkins/Dockerfile` | New. `FROM jenkins/jenkins:2.580.2-lts` + three tools the stock image lacks: `uv` (Lint/Test), the `docker` CLI (Build/Push), and `trivy` (the image gate). The base is the real Docker Hub image; plugins are *not* baked in — that's the one-time first-run step. |
-| `docker-compose.yml` | New `jenkins` service, behind its own `jenkins` profile: build `course-jenkins`, named `jenkins_home` volume, host socket mounted, `user: "0"`, port 13000. |
+| `jenkins/docker-compose.yml` | New. The **CI server as its own compose project** — `jenkins` service building `course-jenkins` (its sibling `jenkins/Dockerfile`), named `jenkins_home` volume, host socket mounted, `user: "0"`, port 13000. `name: devops_course` pins the project name so the volume keeps its prefix. One file = one machine: the root `docker-compose.yml` is the "app server", this is the "CI server" — ch.8's "move Jenkins to a VPS" is now *ship this one folder*. |
+| `docker-compose.yml` | ch.7's jenkins service **removed**: two machines, two projects. A comment now points to `jenkins/docker-compose.yml`. |
 | `Makefile` | New `make pipeline`: boots Jenkins and prints the one-time setup. |
 | `README.md` | Branch-map row + ch.7 architecture snapshot. |
 
@@ -286,19 +287,25 @@ shape, and (b) why the poll still has a job in the world (the poll is the
 
 ## Architecture as of this chapter
 
-The two-service ch.5 topology gains a **third service on its own profile** —
-Jenkins — plus the two new lines of the story: a *poll* from GitHub and a
-*push* to Docker Hub. The socket mount is the bridge between "runs in the
-container" and "builds on the host".
+One principle, two files: **one compose file = one machine.** The root
+`docker-compose.yml` is the *app server* (app + postgres). ch.7 adds the
+*CI server* — `jenkins/docker-compose.yml`, a standalone project (its own
+`jenkins/Dockerfile`, its own `jenkins_home` volume, the host socket
+mount) — plus the two new lines of the story: a *poll* from GitHub and a
+*push* to Docker Hub. No coupling between the two projects at all: Jenkins
+never talks to the app over a network, only to the host daemon through the
+socket.
 
 ```mermaid
 flowchart LR
     gh["GitHub<br/>07-jenkins-ci branch"]
-    subgraph compose["docker-compose.yml"]
+    subgraph cisc["jenkins/docker-compose.yml<br/>(the CI server)"]
         jenkins["jenkins<br/>(course-jenkins,<br/>uv + docker CLI + trivy)"]:::jenkins
         jenkins_home[("jenkins_home<br/>volume")]
-        app["app + postgres<br/>(core profile)"]:::core
         jenkins --- jenkins_home
+    end
+    subgraph appc["docker-compose.yml<br/>(the app server)"]
+        app["app + postgres<br/>(core profile)"]:::core
     end
     dockerd[["host docker daemon"]]
     tar[["notes-app.tar<br/>(docker save)"]]
@@ -309,12 +316,13 @@ flowchart LR
     jenkins -->|"docker save<br/>via the socket"| tar
     tar -->|"trivy --input<br/>gate: library CRITICALs"| jenkins
     jenkins -->|"docker push"| hub
-    jenkins -.->|"ch.8: pulls + runs"| app
+    jenkins -.->|"ch.8: pulls + runs<br/>(on the VPS)"| app
 
     classDef jenkins fill:#fff3e0,stroke:#e65100;
     classDef core fill:#e8f5e9,stroke:#2e7d32;
 ```
 
-Next chapter (ch.8) ships that pushed image: a VPS runs `docker compose` for
-the app and gets the image from Docker Hub — and optionally hosts Jenkins
-itself, so a push to GitHub deploys across the internet.
+Next chapter (ch.8) ships that pushed image: a VPS runs the app's compose
+file and gets the image from Docker Hub — and optionally hosts the CI
+server itself (the `jenkins/` folder, copied to the box), so a push to
+GitHub deploys across the internet.

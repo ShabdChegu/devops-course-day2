@@ -5,10 +5,11 @@
 // `pipeline {}` body (the course's Declarative Pipeline plugin provides them).
 //
 // WHERE does this run? `agent any` = the CONTROLLER itself - the jenkins
-// service in docker-compose.yml (course-jenkins = stock Jenkins + uv + the
-// docker CLI + trivy). No agent, no DinD: the controller's docker CLI reaches
-// the HOST daemon through the socket mount (docs/07-jenkins-ci.md pitfall #1).
-// One bridge, one line to explain.
+// service in jenkins/docker-compose.yml, its OWN compose project ("one
+// file = one machine") (course-jenkins = stock Jenkins + uv + the docker
+// CLI + trivy). No agent, no DinD: the controller's docker CLI reaches
+// the HOST daemon through the socket mount (docs/07-jenkins-ci.md
+// pitfall #1). One bridge, one line to explain.
 //
 // The poll trigger is OWNED BY THIS FILE, not the UI: the `triggers` block
 // writes Poll SCM (H/5) into the job at build start. After that, a push to the

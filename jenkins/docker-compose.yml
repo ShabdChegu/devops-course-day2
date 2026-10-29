@@ -1,0 +1,70 @@
+# ch.7 - the CI SERVER, as its own compose project.
+#
+# One compose file = one machine. The root docker-compose.yml is the
+# "app server" (app + db); this file is the "CI server" - where Jenkins
+# lives in a real setup. Keeping them apart is the same mental model
+# ch.8 uses when one of them becomes a VPS.
+#
+#   make pipeline   # build the course-jenkins image + start this project
+#
+# `name:` pins the project name to `devops_course` so the NAMED VOLUME
+# keeps its `devops_course_jenkins_home` prefix - the default would
+# derive it from this directory ("jenkins_jenkins_home") and your
+# plugins, the docker-hub credential, and the job would be orphaned.
+# (compose v2 top-level key; the root file's project name is the same.)
+name: devops_course
+
+services:
+  # Jenkins, in Docker: the controller runs in a container, and the
+  # pipeline's job is to watch YOUR git repo and rebuild the app when
+  # you push. That's what "CI" means here: a machine notices your
+  # commit before you remember to run it.
+  #
+  # `build:` - course-jenkins = stock Jenkins + uv + the docker CLI +
+  # trivy (jenkins/Dockerfile, same folder - the "CI server" ships as
+  # one self-contained unit). The pipeline's stages run on the
+  # controller itself (`agent any`), so the controller container must
+  # carry every tool a stage uses: uv for lint/test, the docker CLI
+  # for the build stage - and that docker only reaches a daemon
+  # through the socket mount below.
+  #
+  # The ch.7 gotcha (docs/07-jenkins-ci.md pitfall #1), one line:
+  # /var/run/docker.sock -> the HOST's daemon, visible from in here. No
+  # DinD: no second daemon hiding inside a box.
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: course-jenkins
+    # The controller must survive a stop/restart of its own - a CI box that
+    # vanishes when a pipeline POSTs /restart is useless. (A student POSTing
+    # /restart with a stale crumb, or a reboot, would otherwise kill it.)
+    restart: unless-stopped
+    # Root, deliberately: the host's docker socket is only usable by the
+    # host's root. Production Jenkins would not run as root - the course
+    # says so in docs/07 pitfall #5.
+    user: "0"
+    environment:
+      JENKINS_PORT: 8080
+      JENKINS_SLAVE_AGENT_PORT: 50000
+      # HOME -> the volume, not /root: uv's wheel cache, its managed
+      # Python, and every stage's .venv then live on jenkins_home - so
+      # build #2 of any pipeline is minutes faster than build #1, and
+      # nothing the pipeline does is thrown away when the container is.
+      HOME: /var/jenkins_home
+    volumes:
+      # JENKINS_HOME on a NAMED volume: your FIRST run installs the two
+      # plugin families + creates the job (docs/07 "Try it yourself"); that
+      # setup - and every workspace's .venv - persists HERE, so later
+      # `make pipeline` boots straight into a working Jenkins. ch.8's VPS
+      # gets the same volume: that IS the "move Jenkins to a server" diff.
+      - jenkins_home:/var/jenkins_home
+      # THE gotcha: the host daemon, visible from in here.
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      # 13000 on the host -> 8080 in the container (Jenkins' default).
+      # `make check` verifies 13000 is free first.
+      - "13000:8080"
+
+volumes:
+  jenkins_home:

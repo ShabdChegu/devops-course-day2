@@ -32,10 +32,14 @@ rebuild or check out the later branches and you'll watch it grow.
 ```mermaid
 flowchart LR
     gh["GitHub"]
-    jenkins["jenkins (course-jenkins)"]
+    subgraph ci["jenkins/docker-compose.yml (the CI server)"]
+        jenkins["jenkins (course-jenkins)"]
+    end
+    subgraph appc["docker-compose.yml (the app server)"]
+        app["app + postgres<br/>(core profile)"]
+    end
     dockerd["host docker daemon"]
     hub["Docker Hub"]
-    app["app + postgres<br/>(core profile)"]
 
     gh -->|"Poll SCM H/5"| jenkins
     jenkins -->|"docker build/save via socket"| dockerd
@@ -44,9 +48,10 @@ flowchart LR
     jenkins -.->|"ch.8: pull + run"| app
 ```
 
-*As of ch.7: a push to GitHub fires the pipeline, which lints, scans, tests,
-builds on the host daemon and pushes to Docker Hub. Each chapter's doc shows
-this same diagram at its own snapshot.*
+*As of ch.7: a push to GitHub fires the CI server's pipeline, which lints,
+scans, tests, builds on the host daemon and pushes to Docker Hub. One compose
+file = one machine — the app server and the CI server are separate projects.
+Each chapter's doc shows this same diagram at its own snapshot.*
 
 ## Branch map
 | # | Branch | Concept |

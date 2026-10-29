@@ -43,8 +43,10 @@ build:
 	docker build -t $(IMAGE) .
 
 # ch.5: start/stop the core stack (app + postgres). `up` rebuilds the app
-# image first, then runs the core profile detached. Only core - monitoring /
-# jenkins / jaeger / signoz stay OFF until their chapters add a profile.
+# image first, then runs the core profile detached. Only core - the CI
+# server is a SEPARATE project (jenkins/docker-compose.yml, ch.7: one file
+# = one machine), and monitoring / jaeger / signoz stay OFF until their
+# chapters add a profile.
 # .env is created from .env.example on first run so `make up` just works;
 # change the password in .env before you rely on it (it never gets committed).
 up:
@@ -109,10 +111,11 @@ logs:
 run-docker: build
 	docker run --rm -p 8000:8000 $(IMAGE)
 
-# ch.7: the CI controller, in Docker. `--build` also builds the
-# course-jenkins image (stock Jenkins + uv + docker CLI + trivy,
-# jenkins/Dockerfile), so this one target converges a fresh machine:
-# nothing pre-cached needed.
+# ch.7: the CI controller, in Docker - its OWN compose project
+# (jenkins/docker-compose.yml: one file = one machine = "the CI
+# server"). `--build` also builds the course-jenkins image (stock
+# Jenkins + uv + docker CLI + trivy, jenkins/Dockerfile), so this one
+# target converges a fresh machine: nothing pre-cached needed.
 #
 # First run is the one-time setup (docs/07-jenkins-ci.md "Try it yourself"):
 # http://127.0.0.1:13000 -> install the two plugin families (git,
@@ -120,9 +123,9 @@ run-docker: build
 # this repo + branch, Poll SCM H/5). Everything you set up then lives in
 # the jenkins_home volume, so re-runs of this target just work.
 pipeline:
-	docker compose --profile jenkins up -d --build
+	docker compose -f jenkins/docker-compose.yml up -d --build
 	@echo "waiting for Jenkins to finish booting (first boot of a fresh volume ~60-120s)..."
-	@cid=$$(docker compose --profile jenkins ps -q jenkins | head -1); \
+	@cid=$$(docker compose -f jenkins/docker-compose.yml ps -q jenkins | head -1); \
 	ok=no; \
 	for i in $$(seq 1 45); do \
 		if docker logs "$$cid" 2>&1 | grep -q "Jenkins is fully up and running"; then ok=yes; break; fi; \
