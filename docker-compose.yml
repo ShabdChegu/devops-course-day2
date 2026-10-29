@@ -16,7 +16,11 @@
 services:
   app:
     build: .
-    image: notes-app
+    # ch.8: deploy.sh points this image at a pushed tag (APP_IMAGE) - the
+    # same file, the same container, a DIFFERENT image. The default keeps
+    # `make up` doing ch.4's local build; a bare local name (the .env
+    # default) resolves from the local store, a registry name gets pulled.
+    image: ${APP_IMAGE:-notes-app}
     profiles: ["core"]
     depends_on:
       # The app creates its tables at import time - so Postgres must be

@@ -52,6 +52,24 @@ services:
       # build #2 of any pipeline is minutes faster than build #1, and
       # nothing the pipeline does is thrown away when the container is.
       HOME: /var/jenkins_home
+      # ch.8 - WHERE the pipeline's Deploy stage points the box: the
+      # server details live HERE (not in the Jenkins UI, not in a
+      # credential): configuration, not secrets - ch.5's vars-only rule,
+      # and `make deploy` reads the SAME values from the root .env, so
+      # one source of truth. 127.0.0.1 = the local dry-run target: the
+      # whole chapter works with zero VPS. To deploy to a VPS: point
+      # these at the box's IP + user (the VPS stays free & vars-only;
+      # only the SSH KEY is a secret, in the server-ssh credential).
+      SERVER_HOST: ${SERVER_HOST:-127.0.0.1}
+      # who the pipeline ssh's AS on the box (deploy.sh builds
+      # $SERVER_USER@$SERVER_HOST). Must equal the user whose PUBLIC key is in
+      # the box's authorized_keys - the key itself is the server-ssh
+      # credential; this is the config half of that pair.
+      SERVER_USER: ${SERVER_USER:-}
+      SERVER_PORT: ${SERVER_PORT:-8000}
+      # The Deploy stage pulls the tag $DEPLOY_USER/notes-app:<sha> - the
+      # same account as the docker-hub credential (server/README.md §3).
+      DEPLOY_USER: ${DEPLOY_USER:-testuser}
     volumes:
       # JENKINS_HOME on a NAMED volume: your FIRST run installs the two
       # plugin families + creates the job (docs/07 "Try it yourself"); that

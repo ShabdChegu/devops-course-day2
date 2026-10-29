@@ -1,0 +1,59 @@
+# ch.8 - the APP SERVER manifest: what a second machine (the VPS) runs.
+#
+# Same shape as the root docker-compose.yml (app + postgres) with TWO
+# deliberate differences - both are the chapter:
+#
+#   1. NO `build:` section. The box PULLS, it never builds: the image is
+#      ch.7's artifact, shipped through the registry, gated by lint/test/
+#      trivy BEFORE it can ever reach this file. "The box can't invent
+#      images" is what keeps prod on passing code.
+#   2. No port 5432 published. The root file exposes postgres for YOUR
+#      laptop's psql convenience; the box's database is the APP's, not
+#      yours - the one habit that makes a dev box look like a prod box.
+#
+# deploy.sh always points APP_IMAGE at a registry reference (ch.7's pushed
+# tag); a bare `docker compose up` on the box with no APP_IMAGE has
+# nothing to pull (notes-app is not on Docker Hub) and no build section to
+# fall back to - by design.
+
+services:
+  app:
+    # ch.8's SEAM: deploy.sh runs `APP_IMAGE=user/notes-app:<sha7> docker
+    # compose up ...` - the same file, the same container name, a different
+    # IMAGE. Default keeps a bare invocation pointing at ch.4's name.
+    image: ${APP_IMAGE:-notes-app}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # ch.2's seam pays off on the box: the app reads its DB from
+      # DATABASE_URL - the box's .env (created ONCE by bootstrap.sh) fills
+      # the interpolation; the containers never see the raw .env.
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Named volume: the box's data OUTLIVES the container - and the
+      # ch.5 pitfall lives here, relocated: the password is baked in when
+      # THIS volume is first created. bootstrap.sh therefore copies .env
+      # ONCE and never again (docs/08 pitfall #4).
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    # No ports: postgres stays on the box's internal network.
+
+volumes:
+  pgdata:

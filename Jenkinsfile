@@ -152,15 +152,22 @@ pipeline {
             //     (visible in `ps` otherwise).
             //
             // Tags: one image per build - "notes-app:14" is build #14's
-            // commit, forever - plus a moving `latest` for ch.8's deploy,
-            // plus the git SHA itself (env.GIT_COMMIT, set by `checkout scm`):
-            // "which commit is running in production?" becomes a lookup, not a
-            // forensics session.
+            // commit, forever - plus the git SHA itself (env.GIT_COMMIT, set
+            // by `checkout scm`): "which commit is running in production?"
+            // becomes a lookup, not a forensics session. `latest` is kept
+            // for ch.8's deploy as the moving default.
             //
             // A Groovy DOUBLE-QUOTED `sh """` block: `\$VAR` escapes to a
             // literal shell var at run time, while `${...}` is interpolated by
             // Groovy NOW. substring(0, 7) is the 7-char SHA - no shell
             // substring, so no dash "Bad substitution" to trip over here.
+            //
+            // HUB_USER is ALSO ch.8's DEPLOY_USER: the box side of the pipe
+            // (server/docker-compose.yml's ${APP_IMAGE} seam) is filled from
+            // jenkins/docker-compose.yml's environment (where docker-hub
+            // already lives, ch.7) - so "where does deploy get the tag?" and
+            // "where does the box learn the image name?" are one answer:
+            // the same one place.
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub',
                               usernameVariable: 'HUB_USER', passwordVariable: 'HUB_PASS')]) {
@@ -176,29 +183,75 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy') {
+            // ch.8 in one stage: deliver the artifact ch.7 just proved.
+            //
+            // The pull is NOT triggered by the poll - the poll fired THIS
+            // build; the build does the delivering. The exact SHA tag the
+            // Push stage just uploaded (\${env.GIT_COMMIT}, interpolated by
+            // Groovy now - deploy.sh gets a literal tag, never a \${}) on
+            // the box jenkins/docker-compose.yml's SERVER_HOST points at:
+            //   127.0.0.1 (the default) = your own machine - the whole
+            //   chapter runs with no VPS (the "free & self-contained" rule);
+            //   <vps ip> = the same commands over ssh -T, using:
+            //     - the server-ssh credential (SSH Username with private
+            //       key, ch.7's docker-hub pattern, server/README.md §3):
+            //       withCredentials materializes the key as a TEMP FILE,
+            //       deploy.sh is told where via DEPLOY_SSH_KEY_FILE;
+            //     - deploy.sh's WORKSPACE-seeded known_hosts: the first
+            //       ssh succeeds AND a changed host key still fails -
+            //       accept-new is the human-only path (server/deploy.sh).
+            //
+            // deploy.sh is TARGET-AWARE: one script, both transports, and
+            // it verifies the app ANSWERS (curl retry loop), not just that
+            // `up -d` exited 0 - the crash-loop lesson, docs/08 pitfall #2.
+            //
+            // Red here means: the image already PROVED green and is already
+            // pushed - the box simply did not take it. post.success does not
+            // fire (a red build is a red build); the fix is the box, then
+            // Build now - idempotent, and it redeploys the same tag.
+            steps {
+                // sshUserPrivateKey: keyFileVariable = the PATH to a temp
+                // file holding the private key (the plugin writes + cleans
+                // it up; it's masked, never echoed). We hand that path to
+                // deploy.sh, which does `ssh -i` - no key material in this
+                // script, no /tmp juggling, nothing to leak into the log.
+                withCredentials([sshUserPrivateKey(credentialsId: 'server-ssh',
+                              keyFileVariable: 'DEPLOY_KEY')]) {
+                    sh """
+                        DEPLOY_SSH_KEY_FILE="\$DEPLOY_KEY" \
+                        bash server/deploy.sh "\$DEPLOY_USER/notes-app:${env.GIT_COMMIT.substring(0, 7)}"
+                    """
+                }
+            }
+        }
     }
 
     // `post` = lifecycle hooks that run after the body, whatever its
     // outcome. Three hooks, three honest jobs (the condition names are a
     // fixed declarative set - `failure`, not `failed`; build #9 proves it):
-    //   success - the one-line receipt (what's now on Docker Hub, where).
+    //   success - the one-line receipt (what's now on Docker Hub, where, and
+    //             - ch.8 - what the box is now running).
     //   always  - sweep dangling images. Every `docker build` re-tags
     //             notes-app:latest, orphaning the previous one; without
     //             this the host store fills up a 1.7GB image per build.
     //             (Only dangling - it can never touch a tagged image.)
-    //   failure - the honest note: a red build pushes NOTHING, so
-    //             Docker Hub's `latest` still points at the last green
-    //             build. That's a feature, not a bug - ch.8's deploy
-    //             only ever pulls a passing artifact.
+    //   failure - the honest note: a red build pushes NOTHING, so Docker
+    //             Hub's `latest` still points at the last green build, and
+    //             (ch.8) NOTHING was deployed - the box still runs its
+    //             last green version. Feature, not bug: a broken build can
+    //             never take production down.
     post {
         success {
             echo "shipped: notes-app:${env.BUILD_NUMBER} + ${env.GIT_COMMIT.substring(0, 7)} + latest on Docker Hub."
+            echo "deployed: that same tag is live on ${env.SERVER_HOST}:${env.SERVER_PORT}."
         }
         always {
             sh 'docker image prune -f'
         }
         failure {
-            echo "CI red - nothing was pushed. Docker Hub's latest still points at the last green build."
+            echo "red build pushed nothing and deployed nothing - Docker Hub's latest and the box's running container still point at the last green build. Fix, then Build now: deploy is idempotent, the same tag just re-runs."
         }
     }
 }

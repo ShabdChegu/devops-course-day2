@@ -124,8 +124,17 @@ run-docker: build
 # docker-hub credential -> the notes-pipeline job (Pipeline from SCM,
 # this repo + branch). Everything you set up then lives in the
 # jenkins_home volume, so re-runs of this target just work.
+# ch.8: --env-file .env - compose's auto-load looks in the PROJECT directory
+# (jenkins/), not where you invoke it, so the root .env's SERVER_* would
+# silently fall back to the ${VAR:-default} values. Conditional: a machine
+# that has not run `make up` yet has no .env, and a missing --env-file is
+# a hard error (the defaults then just apply, which is the ch.8 dry-run).
+ifneq ($(wildcard .env),)
+JENKINS_ENV_FLAGS := --env-file .env
+endif
+
 pipeline:
-	docker compose -f jenkins/docker-compose.yml up -d --build
+	docker compose $(JENKINS_ENV_FLAGS) -f jenkins/docker-compose.yml up -d --build
 	@echo "waiting for Jenkins to finish booting (first boot of a fresh volume ~60-120s)..."
 	@cid=$$(docker compose -f jenkins/docker-compose.yml ps -q jenkins | head -1); \
 	ok=no; \
