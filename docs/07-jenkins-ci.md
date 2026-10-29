@@ -85,6 +85,10 @@ From a clean checkout of `07-jenkins-ci`:
 make pipeline        # builds course-jenkins, boots Jenkins on :13000
 ```
 
+> The full day-to-day quickstart (run, credential, job, extending the
+> pipeline) lives in [jenkins/README.md](../jenkins/README.md) — this
+> section is the abridged version with the course context.
+
 Wait for "Jenkins is fully up and running", then open
 `http://localhost:13000`. The **one-time setup** (takes ~5 minutes; the named
 volume keeps it, so you never repeat it):
