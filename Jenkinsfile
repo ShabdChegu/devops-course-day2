@@ -12,7 +12,7 @@
 // ~5 min - no Build button, no UI. (Local edits don't fire it: the
 // poller compares the branch tip on the remote, not your disk.)
 properties([
-    pipelineTriggers([pollSCM('H/5')])
+    pipelineTriggers([pollSCM('H/5 * * * *')])
 ])
 
 node {
