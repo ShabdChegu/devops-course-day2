@@ -8,10 +8,11 @@
 ## Concept
 
 CI = *the same commands a developer runs, run by a machine, on every commit*.
-The whole pipeline is six `sh` stages plus a `post` block, and the honesty is
-the point:
+The whole pipeline is a `Sync` step, three checks that run **in parallel**
+(Lint · Scan · Test), the image build, the Trivy gate, and the push — plus a
+`post` block. And the honesty is the point:
 
-| Stage | Command | Where you already ran it |
+| Step | Command | Where you already ran it |
 |-------|---------|--------------------------|
 | Lint | `uv run ruff check . && ruff format --check .` | `make lint` (ch.1) |
 | Scan | `bash scripts/scan-secrets.sh` | `make scan` + pre-commit (ch.5) |
@@ -19,6 +20,9 @@ the point:
 | Build | `docker build -t notes-app .` | `make build` (ch.4) |
 | Gate | `trivy image --input … --pkg-types library --severity CRITICAL --exit-code 1` (new) | — |
 | Push | `docker login` + `docker push` (new) | — |
+
+(Lint, Scan and Test are three `parallel` sub-stages under one `Checks`
+stage — independent checks don't need to wait for each other.)
 
 If CI is red, the mistake is one you could have made yourself; the pipeline
 just refuses to ship it.
@@ -30,11 +34,17 @@ Three ideas carry this chapter:
   daemon through a mounted socket (`/var/run/docker.sock`). That's the gotcha:
   no Docker-in-Docker, no second daemon — the image that the pipeline builds
   is the one on your `docker images`. One bridge, one line to explain.
-- **The trigger is owned by the repo, not the UI.** The `properties` step at
-  the top of the Jenkinsfile writes `Poll SCM H/5 * * * *` into the job on the
-  first build. After that, Jenkins asks GitHub *"did the branch move?"* every
+- **The trigger is owned by the repo, not the UI.** The `triggers` block in
+  the Jenkinsfile writes `Poll SCM H/5 * * * *` into the job on every build.
+  After that, Jenkins asks GitHub *"did the branch move?"* every
   ~5 minutes; a pushed commit starts a build on its own. Local edits don't
   fire it — the poller compares the **remote tip**, not your disk.
+- **It's a *declarative* pipeline — and that's load-bearing.** `options` and
+  `post` are declarative-only keywords and are only legal *inside* a
+  `pipeline {}` body. Writing them inside a scripted `node {}` block compiles
+  to nothing and the build dies with `No such DSL method 'options'` (pitfall
+  #10) — the exact shape this branch's first draft shipped, caught by the
+  first poll-fired build.
 - **A gate is only useful if it goes green.** The Trivy stage fails the
   build on a *CRITICAL* CVE in a *library we ship* — not on the whole
   image's OS layer (the base image carries ~2000 of its own CVEs; a gate
@@ -49,20 +59,22 @@ of truth you can read, diff, and review like any other code.
 
 | File | Change |
 |------|--------|
-| `Jenkinsfile` | New. The pipeline: `properties` (installs the Poll SCM trigger) + `options` + 6 stages + a `post` block. Scripted on the **controller** — `node` means "run in the Jenkins container itself"; no agents, no DinD. |
+| `Jenkinsfile` | New. A **declarative** pipeline: `triggers` (installs the Poll SCM trigger) + `options` + `Sync`, parallel `Checks` (Lint/Scan/Test), Build, Trivy Gate, Push — plus a `post` block. `agent any` means "run on the **controller** itself"; no agents, no DinD. |
 | `jenkins/Dockerfile` | New. `FROM jenkins/jenkins:2.580.2-lts` + three tools the stock image lacks: `uv` (Lint/Test), the `docker` CLI (Build/Push), and `trivy` (the image gate). The base is the real Docker Hub image; plugins are *not* baked in — that's the one-time first-run step. |
 | `docker-compose.yml` | New `jenkins` service, behind its own `jenkins` profile: build `course-jenkins`, named `jenkins_home` volume, host socket mounted, `user: "0"`, port 13000. |
 | `Makefile` | New `make pipeline`: boots Jenkins and prints the one-time setup. |
 | `README.md` | Branch-map row + ch.7 architecture snapshot. |
 
 New concepts named in the code: **Poll SCM** (tip comparison against the
-remote, `H/5 * * * *`), **`properties` step** (job config written *by* the
-pipeline), **`withCredentials` / `--password-stdin`** (secret injected for one
-block, masked in logs, never on the command line), **build-number + git-SHA
-tags** (`notes-app:6` *and* `notes-app:3f81c0a` are the same commit),
-**`post` hooks** (`success`/`always`/`failed` lifecycle actions), and the
-**Trivy image gate** (a scan that fails the build on a critical vuln in a
-library *we ship* — scoped so it can actually go green).
+remote, `H/5 * * * *`), **the declarative `triggers` block** (job config
+written *by* the pipeline — the modern replacement for the scripted
+`properties` step), **`withCredentials` / `--password-stdin`** (secret
+injected for one block, masked in logs, never on the command line),
+**build-number + git-SHA tags** (`notes-app:6` *and* `notes-app:3f81c0a`
+are the same commit), **`post` hooks** (`success`/`always`/`failed`
+lifecycle actions), and the **Trivy image gate** (a scan that fails the
+build on a critical vuln in a library *we ship* — scoped so it can actually
+go green).
 
 ## Try it yourself
 
@@ -79,13 +91,18 @@ volume keeps it, so you never repeat it):
 1. **Run the setup wizard** — at the "install suggested plugins" step, accept
    the defaults. That installs everything the pipeline uses: `git`,
    `workflow-aggregator` (the whole pipeline family), `credentials-binding`.
+   The pipeline is **declarative** (`pipeline {}` with `options` / `post`
+   blocks), so make sure the **`Pipeline: Declarative`** plugin is in there —
+   it is, by default, but a manual minimal install can omit it, and a missing
+   one is exactly the `No such DSL method 'options'` of pitfall #10.
 2. **Add the registry credential** — Manage Jenkins → Credentials → System →
    Global credentials → Add credentials: kind *Username with password*,
    **ID `docker-hub`** (fill this field!), your free Docker Hub account.
 3. **Create the job** — New Item → `notes-pipeline`, type *Pipeline*.
    Definition: *Pipeline script from SCM*, Git, URL
    `https://github.com/<you>/devops-course.git`, branch `origin/07-jenkins-ci`.
-4. **Build now** — six stages, then green.
+4. **Build now** — `Sync` → `Checks` (Lint · Scan · Test in parallel) →
+   `Build image` → `Gate` → `Push`, then green.
 
    The Gate stage's first run takes a few extra minutes (Trivy downloads
    its vulnerability database once; the volume caches it for every later
@@ -107,9 +124,10 @@ docker images notes-app                # host image, rebuilt by the pipeline
    the compose file. Without it, the container's CLI has no daemon to talk
    to. (No Docker-in-Docker, no second daemon — that's the design.)
 
-2. **Pipeline dies on `properties` with `Invalid input: "H/5"`.** `H/5` is
-   the *UI preset* shorthand; the pipeline API hands the string to the real
-   cron parser, which wants all five fields: `pollSCM('H/5 * * * *')`.
+2. **Pipeline dies on the trigger with `Invalid input: "H/5"`.** `H/5` is
+   the *UI preset* shorthand; the `triggers` block (declarative) or the
+   `properties` step (scripted — the old spelling) hands the string to the
+   real cron parser, which wants all five fields: `pollSCM('H/5 * * * *')`.
    (The `H` hashes the offset per job, so a class full of Jenkins boxes
    doesn't all poll GitHub at second 0 of the same minute.)
 
@@ -163,6 +181,19 @@ docker images notes-app                # host image, rebuilt by the pipeline
    anything" but means "exit with 0 regardless of findings" — the flag
    value is the exit code to *use when findings match*, not a threshold.)
 
+10. **Pipeline dies at the top with `No such DSL method 'options'` (or
+    `'post'`).** Two causes, in the order we hit them:
+    (a) *mixed DSL* — `options`/`post` are **declarative-only** keywords, so
+    they must live inside a `pipeline { }` body. Drop them into a scripted
+    `node { }` block and the resolver can't find them; the fix is
+    `pipeline { agent any ... }`, not "install more of the same plugin".
+    (b) *the declarative plugin is absent* — the keywords above only exist
+    if the `Pipeline: Declarative` plugin is installed; a minimal manual
+    install skips it. In the stock setup (setup wizard's suggested
+    plugins) it's already there, so (a) is the one that bites in practice.
+    The error lists every DSL step it *does* know — `options` is missing
+    from that list, and that's the tell.
+
 ## Stretch exercises
 
 **1. Ratchet the gate.** The shipped gate fails on any *CRITICAL* CVE in the
@@ -184,9 +215,9 @@ shape, and (b) why the poll still has a job in the world (the poll is the
 
 ## Self-check quiz
 
-1. Why does the pipeline run on the **controller** (plain `node`) rather than
-   on an agent, and what three tools did we have to add to the controller
-   image because of that?
+1. Why does the pipeline run on the **controller** (`agent any`) rather than
+   on a separate agent, and what three tools did we have to add to the
+   controller image because of that?
 2. `H/5 * * * *` — what does the `H` do, and why is that good for a class
    where every student's Jenkins polls the same GitHub?
 3. A student commits, pushes, and waits 10 minutes: no new build. Name the
@@ -238,9 +269,9 @@ shape, and (b) why the poll still has a job in the world (the poll is the
 **Show live** (fast, satisfying, low-risk):
 - The poll firing: push a trivial commit, watch the dashboard — build #N
   appears *started by an SCM change*. ~30-second hold, then refresh.
-- One green console top-to-bottom: Lint → Scan → Test → Build → Gate →
-  Push, ~1.5 minutes on a warm volume (the first build is slower: Trivy's
-  one-time DB download).
+- One green console top-to-bottom: `Sync` → `Checks` (Lint · Scan · Test in
+  parallel) → `Build` → `Gate` → `Push`, ~1.5 minutes on a warm volume
+  (the first build is slower: Trivy's one-time DB download).
 - `docker images notes-app` on the host — the pipeline's artifact is *right
   here*.
 
