@@ -66,5 +66,29 @@ node {
         sh 'docker build -t notes-app .'
     }
 
-    echo "CI green - notes-app:latest rebuilt on the host. ch.8 adds a Deploy stage that ships it."
+    stage('Push to Docker Hub') {
+        // ch.5's secrets story, continued: the registry password lives in
+        // neither the repo, the image, nor the log.
+        //   - One-time UI step (like the plugins): Credentials > System >
+        //     Global credentials > docker-hub, Username/Password, your
+        //     free Docker Hub account.
+        //   - withCredentials injects it as env vars ONLY inside this
+        //     block and masks the value in the console.
+        //   - --password-stdin keeps the password off the command line
+        //     (visible in `ps` otherwise).
+        // Tags: one image per build - "notes-app:14" is build #14's
+        // commit, forever - plus a moving `latest` for ch.8's deploy.
+        withCredentials([usernamePassword(credentialsId: 'docker-hub',
+                      usernameVariable: 'HUB_USER', passwordVariable: 'HUB_PASS')]) {
+            sh '''
+                echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
+                docker tag  notes-app:latest "$HUB_USER/notes-app:$BUILD_NUMBER"
+                docker tag  notes-app:latest "$HUB_USER/notes-app:latest"
+                docker push "$HUB_USER/notes-app:$BUILD_NUMBER"
+                docker push "$HUB_USER/notes-app:latest"
+            '''
+        }
+    }
+
+    echo "CI green - notes-app:latest rebuilt on the host and pushed to Docker Hub. ch.8's Deploy stage pulls it on the server."
 }

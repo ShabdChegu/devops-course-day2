@@ -133,10 +133,11 @@ pipeline:
 		echo ""; \
 		echo "first run? do the one-time setup (docs/07-jenkins-ci.md, 'Try it yourself'):"; \
 		echo "  1. install-plugins: git, workflow-aggregator (restart when asked)"; \
-		echo "  2. new item -> notes-pipeline -> Pipeline"; \
-		echo "  3. Define pipeline: Pipeline script from SCM, repo + branch 07-jenkins-ci"; \
-		echo "  4. triggers -> Poll SCM: H/5   (save, Build now -> green)"; \
-		echo "   -> push a commit and a build fires within ~5 min. Re-run 'make pipeline' later: it just works."; \
+		echo "  2. Credentials > System > Global > docker-hub (Username/Password, your free Docker Hub account)"; \
+		echo "  3. new item -> notes-pipeline -> Pipeline"; \
+		echo "  4. Define pipeline: Pipeline script from SCM, repo + branch 07-jenkins-ci; Build now -> green"; \
+		echo "   -> Poll SCM installs itself (the Jenkinsfile's properties step), so push a commit and"; \
+		echo "      a build fires within ~5 min. Re-run 'make pipeline' later: it just works."; \
 	else \
 		echo "!! jenkins did not come up (container state: $$(docker inspect --format '{{.State.Status}}' "$$cid" 2>/dev/null))."; \
 		echo "   log tail:"; docker logs --tail 10 "$$cid" 2>&1; exit 1; \
