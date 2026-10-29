@@ -71,7 +71,7 @@ written *by* the pipeline — the modern replacement for the scripted
 `properties` step), **`withCredentials` / `--password-stdin`** (secret
 injected for one block, masked in logs, never on the command line),
 **build-number + git-SHA tags** (`notes-app:6` *and* `notes-app:3f81c0a`
-are the same commit), **`post` hooks** (`success`/`always`/`failed`
+are the same commit), **`post` hooks** (`success`/`always`/`failure`
 lifecycle actions), and the **Trivy image gate** (a scan that fails the
 build on a critical vuln in a library *we ship* — scoped so it can actually
 go green).

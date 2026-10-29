@@ -178,13 +178,14 @@ pipeline {
     }
 
     // `post` = lifecycle hooks that run after the body, whatever its
-    // outcome. Three hooks, three honest jobs:
+    // outcome. Three hooks, three honest jobs (the condition names are a
+    // fixed declarative set - `failure`, not `failed`; build #9 proves it):
     //   success - the one-line receipt (what's now on Docker Hub, where).
     //   always  - sweep dangling images. Every `docker build` re-tags
     //             notes-app:latest, orphaning the previous one; without
     //             this the host store fills up a 1.7GB image per build.
     //             (Only dangling - it can never touch a tagged image.)
-    //   failed  - the honest note: a red build pushes NOTHING, so
+    //   failure - the honest note: a red build pushes NOTHING, so
     //             Docker Hub's `latest` still points at the last green
     //             build. That's a feature, not a bug - ch.8's deploy
     //             only ever pulls a passing artifact.
@@ -195,7 +196,7 @@ pipeline {
         always {
             sh 'docker image prune -f'
         }
-        failed {
+        failure {
             echo "CI red - nothing was pushed. Docker Hub's latest still points at the last green build."
         }
     }
