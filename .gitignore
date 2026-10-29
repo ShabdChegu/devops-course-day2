@@ -21,6 +21,7 @@ PLAN.md
 # ch.5's secrets story: the real .env lives on this machine only.
 # The committed, shareable template is .env.example.
 .env
+*.pem
 
 # tool caches
 .ruff_cache/
