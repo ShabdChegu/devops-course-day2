@@ -1,10 +1,13 @@
 # ch.7 - the course's Jenkins CONTROLLER image.
 #
 # Base: stock jenkins/jenkins LTS (the real Jenkins, unchanged). We add the
-# two things the pipeline's stages need that the stock image does not ship:
+# three things the pipeline's stages need that the stock image does not ship:
 #   * uv            -> the lint + test stages run `uv sync` / `uv run`
 #   * docker CLI    -> the build stage drives the HOST's docker daemon
 #                      through the socket mount (the ch.7 gotcha, docs/07 #1)
+#   * trivy         -> the image-scan stage gates the built image: `docker
+#                      save` exports it to a tar, trivy reads the tar
+#                      (it has its own empty store, not the host's)
 #
 # The plugin families (git, pipeline) are NOT in here: on your FIRST run
 # you install them through the UI - that one manual step is where you learn
@@ -29,6 +32,7 @@ USER root
 # drift its toolchain under its own feet.
 ARG UV_VERSION=0.13.6
 ARG DOCKER_VERSION=28.5.0
+ARG TRIVY_VERSION=0.76.1
 
 # No apt layer: the image already ships curl + the CA bundle + git.
 # (The first draft of this file apt-installed ca-certificates and failed -
@@ -60,3 +64,23 @@ RUN set -eux; \
     ln -sf /opt/docker/docker /usr/local/bin/docker; \
     rm /tmp/docker.tgz; \
     /usr/local/bin/docker --version
+
+# trivy: the image-scan stage (docs/07) gates the built image on
+# CRITICAL CVEs in the libs we ship. One static binary, same per-arch
+# pick as the docker CLI. Two gotchas live in that URL:
+#   * arch names are trivy's own (64bit / ARM64), not docker's x86_64/aarch64
+#   * the download path uses the release TAG, which is `v`-prefixed
+#     (download/v${VER}/...) even though the asset FILENAME is not
+#     (trivy_${VER}_...). Get the prefix wrong and you 404 mid-build.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+        amd64) target=64bit ;; \
+        arm64) target=ARM64 ;; \
+        *) echo "unsupported arch: $arch"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-${target}.tar.gz" -o /tmp/trivy.tar.gz; \
+    tar -xzf /tmp/trivy.tar.gz -C /tmp/; \
+    install -m 0755 /tmp/trivy /usr/local/bin/trivy; \
+    rm /tmp/trivy.tar.gz; \
+    /usr/local/bin/trivy --version

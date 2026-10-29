@@ -62,12 +62,12 @@ services:
   #
   #   make pipeline   # build the course-jenkins image + start this profile
   #
-  # `build:` - course-jenkins = stock Jenkins + uv + the docker CLI
-  # (jenkins/Dockerfile). The pipeline's stages run on the controller
-  # itself (the Jenkinsfile says `node`), so the controller container must
-  # carry every tool a stage uses: uv for lint/test, the docker CLI for
-  # the build stage - and that docker only reaches a daemon through the
-  # socket mount below.
+  # `build:` - course-jenkins = stock Jenkins + uv + the docker CLI +
+  # trivy (jenkins/Dockerfile). The pipeline's stages run on the
+  # controller itself (the Jenkinsfile says `node`), so the controller
+  # container must carry every tool a stage uses: uv for lint/test, the
+  # docker CLI for the build stage - and that docker only reaches a
+  # daemon through the socket mount below.
   #
   # The ch.7 gotcha (docs/07-jenkins-ci.md pitfall #1), one line:
   # /var/run/docker.sock -> the HOST's daemon, visible from in here. No
@@ -77,7 +77,7 @@ services:
       context: .
       dockerfile: jenkins/Dockerfile
     image: course-jenkins
-    profiles: ["core"]
+    profiles: ["jenkins"]
     # The controller must survive a stop/restart of its own - a CI box that
     # vanishes when a pipeline POSTs /restart is useless. (A student POSTing
     # /restart with a stale crumb, or a reboot, would otherwise kill it.)
@@ -110,4 +110,4 @@ services:
 
 volumes:
   pgdata:
-  jenkins_home:  
+  jenkins_home:

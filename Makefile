@@ -110,8 +110,9 @@ run-docker: build
 	docker run --rm -p 8000:8000 $(IMAGE)
 
 # ch.7: the CI controller, in Docker. `--build` also builds the
-# course-jenkins image (stock Jenkins + uv + docker CLI, jenkins/Dockerfile),
-# so this one target converges a fresh machine: nothing pre-cached needed.
+# course-jenkins image (stock Jenkins + uv + docker CLI + trivy,
+# jenkins/Dockerfile), so this one target converges a fresh machine:
+# nothing pre-cached needed.
 #
 # First run is the one-time setup (docs/07-jenkins-ci.md "Try it yourself"):
 # http://127.0.0.1:13000 -> install the two plugin families (git,

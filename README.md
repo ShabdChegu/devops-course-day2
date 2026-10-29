@@ -38,7 +38,8 @@ flowchart LR
     app["app + postgres<br/>(core profile)"]
 
     gh -->|"Poll SCM H/5"| jenkins
-    jenkins -->|"docker build/push via socket"| dockerd
+    jenkins -->|"docker build/save via socket"| dockerd
+    jenkins -->|"trivy gate: library CRITICALs"| jenkins
     jenkins --> hub
     jenkins -.->|"ch.8: pull + run"| app
 ```
@@ -57,7 +58,7 @@ this same diagram at its own snapshot.*
 | 4 | `04-docker` | Dockerfile (uv-based) |
 | 5 | `05-compose` | Docker Compose + Postgres + profiles + secrets story |
 | 6 | `06-logging` | Structured (JSON) logging |
-| 7 | `07-jenkins-ci` | Jenkins CI pipeline (in Docker): poll on push → lint/scan/test/build → push to Docker Hub |
+| 7 | `07-jenkins-ci` | Jenkins CI pipeline (in Docker): poll on push → lint/scan/test/build → Trivy gate → push to Docker Hub |
 | 8 | `08-jenkins-cd` | Deploy stage, image tag = git SHA |
 | 9 | `09-health` | `/health`, `/ready`, container healthchecks |
 | 10 | `10-otel-tracing` | OpenTelemetry tracing, trace_id in logs |

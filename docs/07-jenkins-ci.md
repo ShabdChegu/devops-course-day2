@@ -2,12 +2,14 @@
 
 > After this chapter, **a push to GitHub makes a machine rebuild the image**.
 > No button, no SSH, no human: the pipeline checks out the code, runs your
-> exact `make lint` / `make test` / build, and pushes the image to Docker Hub.
+> exact `make lint` / `make test` / build, gates the image through
+> Trivy's CVE scan, and pushes it to Docker Hub.
 
 ## Concept
 
 CI = *the same commands a developer runs, run by a machine, on every commit*.
-The whole pipeline is five `sh` stages, and the honesty is the point:
+The whole pipeline is six `sh` stages plus a `post` block, and the honesty is
+the point:
 
 | Stage | Command | Where you already ran it |
 |-------|---------|--------------------------|
@@ -15,12 +17,13 @@ The whole pipeline is five `sh` stages, and the honesty is the point:
 | Scan | `bash scripts/scan-secrets.sh` | `make scan` + pre-commit (ch.5) |
 | Test | `uv run pytest -q` | `make test` (ch.2) |
 | Build | `docker build -t notes-app .` | `make build` (ch.4) |
+| Gate | `trivy image --input … --pkg-types library --severity CRITICAL --exit-code 1` (new) | — |
 | Push | `docker login` + `docker push` (new) | — |
 
 If CI is red, the mistake is one you could have made yourself; the pipeline
 just refuses to ship it.
 
-Two ideas carry this chapter:
+Three ideas carry this chapter:
 
 - **The pipeline lives in a container, on the host daemon.** The `docker build`
   stage runs *inside* the Jenkins container but drives the *host's* Docker
@@ -32,6 +35,11 @@ Two ideas carry this chapter:
   first build. After that, Jenkins asks GitHub *"did the branch move?"* every
   ~5 minutes; a pushed commit starts a build on its own. Local edits don't
   fire it — the poller compares the **remote tip**, not your disk.
+- **A gate is only useful if it goes green.** The Trivy stage fails the
+  build on a *CRITICAL* CVE in a *library we ship* — not on the whole
+  image's OS layer (the base image carries ~2000 of its own CVEs; a gate
+  that's red on every build teaches students to delete it). The lesson:
+  scope the gate to what a commit is actually responsible for.
 
 And one quiet payoff: everything about *how* the pipeline is triggered and
 *what* it does is now text in the repo — the Jenkinsfile is the single source
@@ -41,8 +49,8 @@ of truth you can read, diff, and review like any other code.
 
 | File | Change |
 |------|--------|
-| `Jenkinsfile` | New. The pipeline: `properties` (installs the Poll SCM trigger) + 5 stages. Scripted on the **controller** — `node` means "run in the Jenkins container itself"; no agents, no DinD. |
-| `jenkins/Dockerfile` | New. `FROM jenkins/jenkins:2.580.2-lts` + two tools the stock image lacks: `uv` (Lint/Test) and the `docker` CLI (Build/Push). The base is the real Docker Hub image; plugins are *not* baked in — that's the one-time first-run step. |
+| `Jenkinsfile` | New. The pipeline: `properties` (installs the Poll SCM trigger) + `options` + 6 stages + a `post` block. Scripted on the **controller** — `node` means "run in the Jenkins container itself"; no agents, no DinD. |
+| `jenkins/Dockerfile` | New. `FROM jenkins/jenkins:2.580.2-lts` + three tools the stock image lacks: `uv` (Lint/Test), the `docker` CLI (Build/Push), and `trivy` (the image gate). The base is the real Docker Hub image; plugins are *not* baked in — that's the one-time first-run step. |
 | `docker-compose.yml` | New `jenkins` service, behind its own `jenkins` profile: build `course-jenkins`, named `jenkins_home` volume, host socket mounted, `user: "0"`, port 13000. |
 | `Makefile` | New `make pipeline`: boots Jenkins and prints the one-time setup. |
 | `README.md` | Branch-map row + ch.7 architecture snapshot. |
@@ -50,8 +58,11 @@ of truth you can read, diff, and review like any other code.
 New concepts named in the code: **Poll SCM** (tip comparison against the
 remote, `H/5 * * * *`), **`properties` step** (job config written *by* the
 pipeline), **`withCredentials` / `--password-stdin`** (secret injected for one
-block, masked in logs, never on the command line), and **build-number tags**
-(`notes-app:6` = the commit of build #6, forever).
+block, masked in logs, never on the command line), **build-number + git-SHA
+tags** (`notes-app:6` *and* `notes-app:3f81c0a` are the same commit),
+**`post` hooks** (`success`/`always`/`failed` lifecycle actions), and the
+**Trivy image gate** (a scan that fails the build on a critical vuln in a
+library *we ship* — scoped so it can actually go green).
 
 ## Try it yourself
 
@@ -74,7 +85,11 @@ volume keeps it, so you never repeat it):
 3. **Create the job** — New Item → `notes-pipeline`, type *Pipeline*.
    Definition: *Pipeline script from SCM*, Git, URL
    `https://github.com/<you>/devops-course.git`, branch `origin/07-jenkins-ci`.
-4. **Build now** — five stages, then green.
+4. **Build now** — six stages, then green.
+
+   The Gate stage's first run takes a few extra minutes (Trivy downloads
+   its vulnerability database once; the volume caches it for every later
+   build).
 
 After build #1, the trigger is live: make a trivial commit, `git push`, and
 within ~5 minutes build **#2 appears started by "an SCM change"** — you
@@ -82,7 +97,7 @@ pressed nothing. Verify the artifacts:
 
 ```bash
 docker images notes-app                # host image, rebuilt by the pipeline
-# Docker Hub dashboard: amanupadhyay/notes-app, tags 2 + latest
+# Docker Hub dashboard: amanupadhyay/notes-app, tags 2, a git SHA + latest
 ```
 
 ## Common pitfalls
@@ -120,11 +135,48 @@ docker images notes-app                # host image, rebuilt by the pipeline
    re-click Build now. (If it recurs on a specific link, that link is the
    lesson.)
 
-## Stretch exercise
+7. **Trivy can't see the image the pipeline just built.** The socket mount
+   gives the *CLI* the host daemon — but `trivy image notes-app` runs its
+   own scanner, which has its own (empty) image store, so it reports the
+   image "not found". The bridge: `docker save notes-app -o …tar` through
+   the host CLI, then `trivy image --input …tar` — no second daemon, no
+   DinD. (Verified empirically: pointing Trivy at a bare image name inside
+   the controller fails to find it; the same scan on the tarball works.)
 
-Replace the poller with a **webhook**: GitHub repo → Settings → Webhooks →
-add the `jenkins` plugin's `GitHub hook` URL (or, off the shelf:
-`curl -fsSL https://<jenkins>/github-hook`), and delete the `pollSCM` line.
+8. **A "gate" that is red on every build gets deleted by day three.**
+   A full-image `--severity HIGH,CRITICAL` scan of our image reports ~2000
+   findings — almost all of them OS-layer CVEs in the uv base image,
+   none of which *our commit* is responsible for. The gate we ship is
+   scoped: `--pkg-types library --severity CRITICAL` — any CRITICAL in the
+   Python libraries we ship fails the build (fixed or not); the OS layer's
+   inherited debt is the base image's problem, not the commit's.
+   (The next ratchet, when you have room in the budget: also fail on
+   HIGH — today that catches 3 fixable starlette CVEs, so the ratchet is
+   "update FastAPI, then flip the flag".) The rule: a gate fails on
+   *introduced* debt, not inherited debt — otherwise it stops being a
+   gate and becomes noise.
+
+9. **`--exit-code 0` is not a gate; `--exit-code 1` is.** Trivy's exit
+   code defaults to 0 even with findings present — without `--exit-code 1`
+   the stage prints a report and the build stays green while a critical
+   CVE ships to the registry. (`--exit-code 0` reads like "fail on
+   anything" but means "exit with 0 regardless of findings" — the flag
+   value is the exit code to *use when findings match*, not a threshold.)
+
+## Stretch exercises
+
+**1. Ratchet the gate.** The shipped gate fails on any *CRITICAL* CVE in the
+Python libraries we ship. Turn it into a real ratchet: (a) run the gate with
+`--severity HIGH` and see it go red on the current FastAPI pin — the 3
+starlette findings; (b) update the pin (`uv add 'fastapi>=<new>'` +
+`uv lock` + commit — the whole pipeline is now the acceptance test for the
+bump); (c) flip the gate to `--severity HIGH,CRITICAL` and prove the same
+stage now passes in *both* directions — it fails when the debt is real,
+passes when you've paid it down.
+
+**2. Webhook instead of poll.** GitHub repo → Settings → Webhooks → add a
+*generic* webhook (POST, JSON) pointing at Jenkins's `http://<jenkins-host>:13000/github-webhook/`
+(the GitHub plugin's hook endpoint), and delete the `pollSCM` line.
 Same pipeline, one round trip instead of up to five minutes. Then, in one
 sentence each, say: (a) why a *secret token* makes this the production
 shape, and (b) why the poll still has a job in the world (the poll is the
@@ -133,15 +185,17 @@ shape, and (b) why the poll still has a job in the world (the poll is the
 ## Self-check quiz
 
 1. Why does the pipeline run on the **controller** (plain `node`) rather than
-   on an agent, and what two tools did we have to add to the controller image
-   because of that?
+   on an agent, and what three tools did we have to add to the controller
+   image because of that?
 2. `H/5 * * * *` — what does the `H` do, and why is that good for a class
    where every student's Jenkins polls the same GitHub?
 3. A student commits, pushes, and waits 10 minutes: no new build. Name the
    three most likely causes, each fixable in under a minute.
 4. Why does the Push stage use `--password-stdin` instead of a flag, and why
    does `docker login` survive container rebuilds?
-5. In ch.8, the VPS deploy will `docker pull` the image this stage pushed.
+5. Why does the Trivy gate scan `--pkg-types library` instead of the whole
+   image — and what single flag makes it a *gate* rather than a report?
+6. In ch.8, the VPS deploy will `docker pull` the image this stage pushed.
    What property of the `notes-app:<BUILD_NUMBER>` tag makes "which commit is
    running in production?" a one-answer question?
 
@@ -149,9 +203,11 @@ shape, and (b) why the poll still has a job in the world (the poll is the
 <summary>Answers</summary>
 
 1. One machine, no agent infrastructure to learn — `node` = "the Jenkins
-   container itself". Two tools the stock image lacks: **`uv`** (Lint/Test
-   need the same interpreter + tooling as the app image, ch.4) and the
-   **`docker` CLI** (Build/Push drive the host daemon through the socket).
+   container itself". Three tools the stock image lacks: **`uv`** (Lint/Test
+   need the same interpreter + tooling as the app image, ch.4), the
+   **`docker` CLI** (Build/Push drive the host daemon through the socket),
+   and **`trivy`** (the Gate stage reads the built image's libs and fails
+   the build on a critical vuln we shipped).
 2. `H` randomizes the *offset within the unit* per job — job A might poll at
    0–4, job B at 3–7 of each 5-minute window. A class of students polling the
    same GitHub at the same second becomes a thundering herd; hashed offsets
@@ -165,7 +221,13 @@ shape, and (b) why the poll still has a job in the world (the poll is the
    it off both. The docker CLI reads its auth from `~/.docker/config.json` —
    and this container's `HOME` is `/var/jenkins_home`, i.e. the named volume —
    so the login persists across rebuilds.
-5. Build number = commit: stage 1 checks out one commit and runs; the image
+5. `--pkg-types library` scopes the gate to the dependencies the commit
+   ships, not the base image's ~2000 inherited OS CVEs (a gate that's red on
+   every build gets switched off; inherited debt isn't this commit's). The
+   flag that turns a *report* into a *gate* is `--exit-code 1` — without it
+   Trivy exits 0 even with findings, so the build would stay green while a
+   critical vuln still shipped.
+6. Build number = commit: stage 1 checks out one commit and runs; the image
    is tagged with that build's number, so `notes-app:6` *is* commit #6's
    tree. `latest` moves; the number doesn't — pin deploys to the number.
 
@@ -176,8 +238,9 @@ shape, and (b) why the poll still has a job in the world (the poll is the
 **Show live** (fast, satisfying, low-risk):
 - The poll firing: push a trivial commit, watch the dashboard — build #N
   appears *started by an SCM change*. ~30-second hold, then refresh.
-- One green console top-to-bottom: Lint → Scan → Test → Build → Push,
-  ~1.5 minutes on a warm volume.
+- One green console top-to-bottom: Lint → Scan → Test → Build → Gate →
+  Push, ~1.5 minutes on a warm volume (the first build is slower: Trivy's
+  one-time DB download).
 - `docker images notes-app` on the host — the pipeline's artifact is *right
   here*.
 
@@ -201,17 +264,20 @@ container" and "builds on the host".
 flowchart LR
     gh["GitHub<br/>07-jenkins-ci branch"]
     subgraph compose["docker-compose.yml"]
-        jenkins["jenkins<br/>(course-jenkins,<br/>uv + docker CLI)"]:::jenkins
+        jenkins["jenkins<br/>(course-jenkins,<br/>uv + docker CLI + trivy)"]:::jenkins
         jenkins_home[("jenkins_home<br/>volume")]
         app["app + postgres<br/>(core profile)"]:::core
         jenkins --- jenkins_home
     end
     dockerd[["host docker daemon"]]
-    hub[["Docker Hub<br/>user/notes-app:<br/>BUILD_NUMBER + latest"]]
+    tar[["notes-app.tar<br/>(docker save)"]]
+    hub[["Docker Hub<br/>user/notes-app:<br/>BUILD_NUMBER + SHA + latest"]]
 
     gh -->|"Poll SCM<br/>H/5 * * * *"| jenkins
-    jenkins -->|"docker build/push<br/>via /var/run/docker.sock"| dockerd
-    jenkins --> hub
+    jenkins -->|"docker build<br/>via /var/run/docker.sock"| dockerd
+    jenkins -->|"docker save<br/>via the socket"| tar
+    tar -->|"trivy --input<br/>gate: library CRITICALs"| jenkins
+    jenkins -->|"docker push"| hub
     jenkins -.->|"ch.8: pulls + runs"| app
 
     classDef jenkins fill:#fff3e0,stroke:#e65100;
