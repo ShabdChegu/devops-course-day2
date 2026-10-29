@@ -118,10 +118,12 @@ run-docker: build
 # target converges a fresh machine: nothing pre-cached needed.
 #
 # First run is the one-time setup (docs/07-jenkins-ci.md "Try it yourself"):
-# http://127.0.0.1:13000 -> install the two plugin families (git,
-# workflow-aggregator) -> create the notes-pipeline job (Pipeline from SCM,
-# this repo + branch, Poll SCM H/5). Everything you set up then lives in
-# the jenkins_home volume, so re-runs of this target just work.
+# http://127.0.0.1:13000 -> wizard's suggested plugins (git,
+# workflow-aggregator, Pipeline: Declarative - the pipeline is declarative,
+# so the plugins for options/post/triggers MUST be there) -> the
+# docker-hub credential -> the notes-pipeline job (Pipeline from SCM,
+# this repo + branch). Everything you set up then lives in the
+# jenkins_home volume, so re-runs of this target just work.
 pipeline:
 	docker compose -f jenkins/docker-compose.yml up -d --build
 	@echo "waiting for Jenkins to finish booting (first boot of a fresh volume ~60-120s)..."
@@ -136,12 +138,13 @@ pipeline:
 		echo "jenkins up: http://127.0.0.1:13000"; \
 		echo ""; \
 		echo "first run? do the one-time setup (docs/07-jenkins-ci.md, 'Try it yourself'):"; \
-		echo "  1. install-plugins: git, workflow-aggregator (restart when asked)"; \
+		echo "  1. wizard plugins: accept the suggested list, and make sure 'Pipeline: Declarative' is installed"; \
+		echo "     (if not: Plugins -> Available -> 'Pipeline: Declarative' -> Install -> restart when asked)"; \
 		echo "  2. Credentials > System > Global > docker-hub (Username/Password, your free Docker Hub account)"; \
 		echo "  3. new item -> notes-pipeline -> Pipeline"; \
 		echo "  4. Define pipeline: Pipeline script from SCM, repo + branch 07-jenkins-ci; Build now -> green"; \
-		echo "   -> Poll SCM installs itself (the Jenkinsfile's properties step), so push a commit and"; \
-		echo "      a build fires within ~5 min. Re-run 'make pipeline' later: it just works."; \
+		echo "   -> the Jenkinsfile's triggers block installs Poll SCM H/5 on that first green build, so a"; \
+		echo "      pushed commit fires the next build within ~5 min. Re-run 'make pipeline' later: it just works."; \
 	else \
 		echo "!! jenkins did not come up (container state: $$(docker inspect --format '{{.State.Status}}' "$$cid" 2>/dev/null))."; \
 		echo "   log tail:"; docker logs --tail 10 "$$cid" 2>&1; exit 1; \
