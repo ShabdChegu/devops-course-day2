@@ -6,10 +6,14 @@
 // daemon through the socket mount (docs/07-jenkins-ci.md pitfall #1).
 // One bridge, one line to explain.
 //
-// The poll trigger lives in the JOB's config (the one-time UI setup,
-// docs/07 "Try it yourself"): Poll SCM, H/5. Push a commit to the watched
-// branch and a build fires within ~5 min - no Build button. Local edits
-// do NOT fire it; the poller compares the branch tip on the remote.
+// The poll trigger is OWNED BY THIS FILE, not the UI: on the first
+// successful build the `properties` step writes Poll SCM (H/5) into the
+// job. After that, a push to the watched branch fires a build within
+// ~5 min - no Build button, no UI. (Local edits don't fire it: the
+// poller compares the branch tip on the remote, not your disk.)
+properties([
+    pipelineTriggers([pollSCM('H/5')])
+])
 
 node {
     stage('Checkout') {

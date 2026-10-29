@@ -13,7 +13,10 @@
 # the ONLY manual run: everything you set up then persists in the volume,
 # so every later `make pipeline` boots a Jenkins that already works.
 
-FROM jenkins/jenkins:lts
+# Pin the LTS release a fresh machine will pull: the whole class builds the
+# same controller. (Re-check the tag against https://www.jenkins.io/ when
+# the course is re-audited - not per session.)
+FROM jenkins/jenkins:2.580.2-lts
 
 # The stock image's default user is the unprivileged `jenkins` account, and
 # buildkit runs our layers as whatever USER the image declares - so the

@@ -77,7 +77,7 @@ services:
       context: .
       dockerfile: jenkins/Dockerfile
     image: course-jenkins
-    profiles: ["jenkins"]
+    profiles: ["core"]
     # The controller must survive a stop/restart of its own - a CI box that
     # vanishes when a pipeline POSTs /restart is useless. (A student POSTing
     # /restart with a stale crumb, or a reboot, would otherwise kill it.)
@@ -110,4 +110,4 @@ services:
 
 volumes:
   pgdata:
-  jenkins_home:
+  jenkins_home:  
