@@ -32,3 +32,8 @@ PLAN.md
 *.tfstate
 *.tfstate.*
 *.tfplan
+
+# Ansible
+*.retry
+ansible/inventory.ini
+.semaphore/

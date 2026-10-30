@@ -1,0 +1,39 @@
+name: devops_course_ansible
+
+services:
+  ansible:
+    image: semaphoreui/semaphore:latest
+    container_name: ansible_runner
+    user: "0:0"
+    environment:
+      - HOME=/root
+      - ANSIBLE_CONFIG=/workspace/ansible.cfg
+    volumes:
+      - .:/workspace
+      - ../server_key.pem:/keys/server_key.pem:ro
+    working_dir: /workspace
+
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    container_name: semaphore_ui
+    user: "0:0"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - SEMAPHORE_DB_DIALECT=sqlite
+      - SEMAPHORE_DB=/etc/semaphore/semaphore.sqlite
+      - SEMAPHORE_ADMIN=admin
+      - SEMAPHORE_ADMIN_PASSWORD=admin
+      - SEMAPHORE_ADMIN_NAME=Admin
+      - SEMAPHORE_ADMIN_EMAIL=admin@devops.local
+      - SEMAPHORE_ACCESS_KEY_ENCRYPTION=gs72mPntFATGJs9qK0pQ0rKtfidlexiMjYCH9gWKhTU=
+      - TZ=UTC
+    volumes:
+      - semaphore_data:/etc/semaphore
+      - .:/workspace
+      - ../server_key.pem:/keys/server_key.pem:ro
+    working_dir: /workspace
+
+volumes:
+  semaphore_data:

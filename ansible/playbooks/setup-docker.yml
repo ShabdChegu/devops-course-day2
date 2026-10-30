@@ -1,0 +1,89 @@
+---
+- name: Provision Docker and Docker Compose on Ubuntu
+  hosts: webservers
+  become: true
+  tasks:
+    - name: Wait for cloud-init to finish (avoids apt lock conflicts on fresh boot)
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      failed_when: false
+
+    - name: Install APT prerequisites
+      ansible.builtin.apt:
+        pkg:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      retries: 5
+      delay: 10
+
+    - name: Ensure /etc/apt/keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+        force: false
+
+    - name: Add Docker official repository to APT sources
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+        update_cache: true
+
+    - name: Install Docker CE, CLI, and Docker Compose plugin
+      ansible.builtin.apt:
+        pkg:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Ensure Docker daemon is running and enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add remote user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user | default('azureuser') }}"
+        groups: docker
+        append: true
+
+    - name: Verify Docker version
+      ansible.builtin.command: docker --version
+      register: docker_version_output
+      changed_when: false
+
+    - name: Verify Docker Compose version
+      ansible.builtin.command: docker compose version
+      register: compose_version_output
+      changed_when: false
+
+    - name: Print Docker and Compose versions
+      ansible.builtin.debug:
+        msg:
+          - "Docker Version: {{ docker_version_output.stdout }}"
+          - "Compose Version: {{ compose_version_output.stdout }}"
+
+    - name: Run Docker smoke test container (hello-world)
+      ansible.builtin.command: docker run --rm hello-world
+      register: hello_world_output
+      changed_when: false
+
+    - name: Print smoke test confirmation
+      ansible.builtin.debug:
+        msg: "SUCCESS: Docker is active and running containers on {{ inventory_hostname }}!"

@@ -36,6 +36,11 @@ help:
 	@echo "  make tf-destroy ch.11: tear down all Azure resources"
 	@echo "  make up-rover  ch.11: start Rover visual architecture UI on http://127.0.0.1:9000"
 	@echo "  make down-rover ch.11: stop Rover UI"
+	@echo "  make ansible-ping ch.12: test SSH connectivity to server2"
+	@echo "  make ansible-check ch.12: dry-run Docker setup playbook (--check --diff)"
+	@echo "  make ansible-setup ch.12: provision Docker & Compose on server2"
+	@echo "  make up-ansible-ui ch.12: start Ansible Semaphore UI on http://127.0.0.1:3000"
+	@echo "  make down-ansible-ui ch.12: stop Ansible Semaphore UI"
 	@echo "  make reset-all wipe everything: app, db, signoz, and jenkins volumes"
 	@echo "  make help    this list"
 
@@ -259,6 +264,8 @@ reset-all:
 	-docker compose -f signoz/compose.yaml down -v
 	@echo "==> wiping Jenkins CI stack..."
 	-docker compose $(JENKINS_ENV_FLAGS) -f jenkins/docker-compose.yml down -v
+	@echo "==> wiping Ansible Semaphore stack..."
+	-docker compose -f ansible/docker-compose.yml down -v
 	@echo ""
 	@echo "all stacks wiped (app, db, signoz, jenkins). Everything clean."
 
@@ -316,4 +323,46 @@ down-rover:
 
 down-tf: down-rover
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-app reset-core reset reset-db scan logs pipeline down-pipeline down-jenkins reset-pipeline reset-jenkins reset-all deploy up-signoz down-signoz reset-signoz tf-init tf-plan tf-apply tf-destroy tf-output up-rover tf-ui down-rover down-tf
+# ch.12: Ansible in Docker & Semaphore UI - its OWN compose project
+# (ansible/docker-compose.yml). Runs ansible and semaphore in Docker.
+ANSIBLE_COMPOSE := docker compose -f ansible/docker-compose.yml
+
+ansible-inventory-check:
+	@if [ ! -f ansible/inventory.ini ]; then \
+		echo "ansible/inventory.ini missing - copying from template..."; \
+		cp ansible/inventory.ini.example ansible/inventory.ini; \
+	fi
+	@if grep -q "127.0.0.1" ansible/inventory.ini; then \
+		echo "[NOTE] ansible/inventory.ini contains 127.0.0.1."; \
+		echo "Run 'make tf-output' and update ansible/inventory.ini with server2's public IP."; \
+	fi
+
+ansible-ping: ansible-inventory-check
+	$(ANSIBLE_COMPOSE) run --rm ansible ansible webservers -m ping
+
+ansible-check: ansible-inventory-check
+	$(ANSIBLE_COMPOSE) run --rm ansible ansible-playbook playbooks/setup-docker.yml --check --diff
+
+ansible-setup: ansible-inventory-check
+	$(ANSIBLE_COMPOSE) run --rm ansible ansible-playbook playbooks/setup-docker.yml
+
+up-ansible-ui:
+	$(ANSIBLE_COMPOSE) up -d semaphore
+	@echo "Ansible Semaphore UI up: http://127.0.0.1:3000"
+	@echo "Credentials: admin / admin"
+
+ansible-ui: up-ansible-ui
+
+down-ansible-ui:
+	$(ANSIBLE_COMPOSE) stop semaphore
+	@echo "Semaphore UI stopped. Restart: make up-ansible-ui"
+
+down-ansible:
+	$(ANSIBLE_COMPOSE) down
+	@echo "Ansible stack stopped."
+
+reset-ansible:
+	$(ANSIBLE_COMPOSE) down -v
+	@echo "Ansible stack and Semaphore database wiped."
+
+.PHONY: help check run test lint lint-fix build run-docker up down reset-app reset-core reset reset-db scan logs pipeline down-pipeline down-jenkins reset-pipeline reset-jenkins reset-all deploy up-signoz down-signoz reset-signoz tf-init tf-plan tf-apply tf-destroy tf-output up-rover tf-ui down-rover down-tf ansible-inventory-check ansible-ping ansible-check ansible-setup up-ansible-ui ansible-ui down-ansible-ui down-ansible reset-ansible
