@@ -22,7 +22,7 @@ services:
       - "3000:3000"
     environment:
       - SEMAPHORE_DB_DIALECT=sqlite
-      - SEMAPHORE_DB=/etc/semaphore/semaphore.sqlite
+      - SEMAPHORE_DB_PATH=/etc/semaphore
       - SEMAPHORE_ADMIN=admin
       - SEMAPHORE_ADMIN_PASSWORD=admin
       - SEMAPHORE_ADMIN_NAME=Admin
@@ -37,3 +37,4 @@ services:
 
 volumes:
   semaphore_data:
+

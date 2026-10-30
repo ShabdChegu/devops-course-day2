@@ -348,6 +348,12 @@ ansible-setup: ansible-inventory-check
 
 up-ansible-ui:
 	$(ANSIBLE_COMPOSE) up -d semaphore
+	@echo "Ensuring admin user exists..."
+	@sleep 2
+	@$(ANSIBLE_COMPOSE) exec -T semaphore sh -c '\
+		if ! semaphore users list --config /etc/semaphore/config.json 2>/dev/null | grep -q "^admin$$"; then \
+			semaphore users add --admin --login admin --name Admin --email admin@devops.local --password admin --config /etc/semaphore/config.json >/dev/null 2>&1 || true; \
+		fi'
 	@echo "Ansible Semaphore UI up: http://127.0.0.1:3000"
 	@echo "Credentials: admin / admin"
 
