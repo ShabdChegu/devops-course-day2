@@ -28,6 +28,8 @@ services:
       - SEMAPHORE_ADMIN_NAME=Admin
       - SEMAPHORE_ADMIN_EMAIL=admin@devops.local
       - SEMAPHORE_ACCESS_KEY_ENCRYPTION=gs72mPntFATGJs9qK0pQ0rKtfidlexiMjYCH9gWKhTU=
+      - ANSIBLE_HOST_KEY_CHECKING=False
+      - ANSIBLE_CONFIG=/workspace/ansible.cfg
       - TZ=UTC
     volumes:
       - semaphore_data:/etc/semaphore

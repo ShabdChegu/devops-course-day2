@@ -14,6 +14,7 @@ Just like `jenkins/`, `signoz/`, and `terraform/`, both the **Ansible CLI runner
 | `inventory.ini` | Active inventory with the public IP from `make tf-output` |
 | `playbooks/ping.yml` | Smoke test playbook to verify SSH connectivity |
 | `playbooks/setup-docker.yml` | Idempotent playbook: installs Docker CE, Compose plugin, user groups, and verifies container engine |
+| `SEMAPHORE.md` | Dedicated step-by-step guide for using Ansible Semaphore Web UI |
 | `../docs/12-ansible.md` | Full chapter guide, concepts, pitfalls, and quiz |
 
 ---
@@ -63,6 +64,8 @@ make ansible-setup
 ## 2. Using the Ansible Semaphore Web UI
 
 Ansible Semaphore provides a modern web interface to view inventory, execute playbooks, and stream live task output.
+
+For complete, step-by-step instructions on setting up a Project, Key Store, Inventory, Repository, and Task Templates, see the **[Semaphore UI Guide](SEMAPHORE.md)**.
 
 1. **Start the Semaphore UI:**
    ```bash

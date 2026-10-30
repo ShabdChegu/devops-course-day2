@@ -141,8 +141,11 @@ make up-ansible-ui
 2. Log in with:
    - **Username:** `admin`
    - **Password:** `admin`
-3. Explore the dashboard: view projects, inventories, and task templates.
-4. When finished:
+3. Configure your Project, Key Store, Inventory, Repository, and Task Template. See the detailed walkthrough in [`ansible/SEMAPHORE.md`](../ansible/SEMAPHORE.md).
+   > [!NOTE]
+   > When configuring the **Task Template**, set the playbook filename to `ansible/playbooks/setup-docker.yml` (relative to the Git repo root).
+4. Run the template and watch real-time colorized logs in the UI.
+5. When finished:
    ```bash
    make down-ansible-ui
    ```
@@ -170,6 +173,11 @@ make up-ansible-ui
 - **What it looks like:** Running `docker ps` returns `permission denied while trying to connect to the Docker daemon socket`.
 - **Why it happens:** The Docker daemon socket is owned by `root:docker`. Non-root users must belong to the `docker` group.
 - **The fix:** The playbook task `Add remote user to docker group` appends `azureuser` to `docker`. Note that active SSH sessions require a re-login for group membership to take effect.
+
+### 5. `make ansible-check` fails with `No package matching 'docker-ce'` on a fresh VM
+- **What it looks like:** Running `make ansible-check` against a newly deployed server throws `fatal: [server2]: FAILED! => {"changed": false, "msg": "No package matching 'docker-ce' is available"}`.
+- **Why it happens:** Check mode (`--check`) simulates changes without actually applying them. The task adding Docker's repository to `/etc/apt/sources.list.d/` was simulated, so APT's cache on `server2` never actually received Docker's package index. When the next task checked for `docker-ce`, APT couldn't find it.
+- **The fix:** Run `make ansible-setup` to perform the actual initial installation. Once the repository is added, subsequent `make ansible-check` calls will succeed and report `changed=0`.
 
 ---
 
