@@ -1,0 +1,15 @@
+# Azure Region
+location = "centralindia"
+
+# Resource Group Name
+resource_group_name = "rg-devops-course-centralindia"
+
+# Virtual Machine details
+vm_name        = "server2"
+vm_size        = "Standard_D2s_v3"
+admin_username = "azureuser"
+
+# Optional: Provide existing public key (e.g. "ssh-rsa AAAA...").
+# If left empty, a 4096-bit RSA key pair is generated automatically as server2_key.pem
+# ssh_public_key = ""
+

@@ -29,6 +29,13 @@ help:
 	@echo "  make up-signoz ch.10: start the standalone SigNoz stack (traces+metrics+logs)"
 	@echo "  make down-signoz ch.10: stop the SigNoz stack (keeps its data volumes)"
 	@echo "  make reset-signoz ch.10: wipe the SigNoz data volumes (drops all telemetry)"
+	@echo "  make tf-init   ch.11: initialize Terraform in Docker"
+	@echo "  make tf-plan   ch.11: preview Azure infrastructure changes"
+	@echo "  make tf-apply  ch.11: provision server2 VM and network in Azure"
+	@echo "  make tf-output ch.11: view VM public IP and SSH command"
+	@echo "  make tf-destroy ch.11: tear down all Azure resources"
+	@echo "  make up-rover  ch.11: start Rover visual architecture UI on http://127.0.0.1:9000"
+	@echo "  make down-rover ch.11: stop Rover UI"
 	@echo "  make reset-all wipe everything: app, db, signoz, and jenkins volumes"
 	@echo "  make help    this list"
 
@@ -269,4 +276,44 @@ deploy:
 	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
 	@if [ -n "$(TAG)" ]; then bash server/deploy.sh "$(TAG)"; else bash server/deploy.sh; fi
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-app reset-core reset reset-db scan logs pipeline down-pipeline down-jenkins reset-pipeline reset-jenkins reset-all deploy up-signoz down-signoz reset-signoz
+# ch.11: Terraform & Rover in Docker - its OWN compose project
+# (terraform/docker-compose.yml). Runs hashicorp/terraform and
+# im2nguyen/rover in Docker containers, passing credentials from root .env.
+TF_ENV_FLAGS := $(if $(wildcard .env),--env-file .env,)
+TF_COMPOSE := docker compose $(TF_ENV_FLAGS) -f terraform/docker-compose.yml
+
+tf-init:
+	$(TF_COMPOSE) run --rm terraform init
+
+tf-plan:
+	$(TF_COMPOSE) run --rm terraform plan -out=plan.tfplan
+	@$(TF_COMPOSE) run --rm --entrypoint /bin/sh terraform -c "terraform show -json plan.tfplan > plan.json" 2>/dev/null || true
+
+tf-apply:
+	$(TF_COMPOSE) run --rm terraform apply -auto-approve
+	@$(TF_COMPOSE) run --rm --entrypoint /bin/sh terraform -c "terraform show -json > plan.json" 2>/dev/null || true
+
+tf-destroy:
+	$(TF_COMPOSE) run --rm terraform destroy -auto-approve
+	@rm -f terraform/plan.tfplan terraform/plan.json terraform/*_key.pem
+
+tf-output:
+	$(TF_COMPOSE) run --rm terraform output
+
+up-rover:
+	@if [ ! -f terraform/plan.json ]; then \
+		echo "Generating plan JSON for Rover..."; \
+		$(MAKE) tf-plan; \
+	fi
+	$(TF_COMPOSE) up -d rover
+	@echo "rover up: http://127.0.0.1:9000"
+
+tf-ui: up-rover
+
+down-rover:
+	$(TF_COMPOSE) stop rover
+	@echo "rover stopped. Restart: make up-rover"
+
+down-tf: down-rover
+
+.PHONY: help check run test lint lint-fix build run-docker up down reset-app reset-core reset reset-db scan logs pipeline down-pipeline down-jenkins reset-pipeline reset-jenkins reset-all deploy up-signoz down-signoz reset-signoz tf-init tf-plan tf-apply tf-destroy tf-output up-rover tf-ui down-rover down-tf

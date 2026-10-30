@@ -26,3 +26,9 @@ PLAN.md
 # tool caches
 .ruff_cache/
 .pytest_cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

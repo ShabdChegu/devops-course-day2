@@ -1,0 +1,32 @@
+name: devops_terraform
+
+services:
+  terraform:
+    image: hashicorp/terraform:1.9.8
+    container_name: devops_terraform
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - tf_cache:/root/.terraform.d/plugin-cache
+    environment:
+      - TF_PLUGIN_CACHE_DIR=/root/.terraform.d/plugin-cache
+      - ARM_CLIENT_ID=${ARM_CLIENT_ID}
+      - ARM_CLIENT_SECRET=${ARM_CLIENT_SECRET}
+      - ARM_SUBSCRIPTION_ID=${ARM_SUBSCRIPTION_ID}
+      - ARM_TENANT_ID=${ARM_TENANT_ID}
+    entrypoint: ["terraform"]
+
+  rover:
+    image: im2nguyen/rover:latest
+    container_name: devops_rover
+    working_dir: /src
+    command: ["-planJSONPath", "/src/plan.json", "-ipPort", "0.0.0.0:9000"]
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./:/src
+    restart: unless-stopped
+
+volumes:
+  tf_cache:
+
