@@ -24,3 +24,43 @@ def test_otlp_exporter_constructs_offline():
     # path is importable AND usable, not just present.
     exporter = OTLPSpanExporter(endpoint="http://127.0.0.1:4317", insecure=True)
     assert exporter is not None
+
+
+def test_health_endpoint_excluded_from_traces():
+    import os
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    app = FastAPI()
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    @app.get("/api/data")
+    def data():
+        return {"data": 123}
+
+    FastAPIInstrumentor.instrument_app(
+        app,
+        tracer_provider=provider,
+        excluded_urls=os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", "health"),
+    )
+
+    client = TestClient(app)
+    client.get("/health")
+    assert len(exporter.get_finished_spans()) == 0
+
+    client.get("/api/data")
+    spans = exporter.get_finished_spans()
+    assert len(spans) > 0
+    assert any("/api/data" in s.name for s in spans)

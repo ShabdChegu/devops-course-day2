@@ -18,14 +18,18 @@ help:
 	@echo "  make lint-fix  ruff auto-fix + format"
 	@echo "  make up      start the stack: app + postgres (compose profile core)"
 	@echo "  make down    stop the stack"
+	@echo "  make reset-app wipe the app + db stack and data volume (drops all notes)"
 	@echo "  make reset-db  wipe the postgres volume + re-init from .env (drops all notes)"
 	@echo "  make scan    secret scan (the pre-commit hook + CI run this same script)"
 	@echo "  make logs    tail the app's structured (JSON) logs from the stack"
 	@echo "  make deploy    ch.8: run server/deploy.sh (the target-aware deploy; TAG=<img:tag>)"
 	@echo "  make pipeline  ch.7: start the CI server (Jenkins, its own compose project)"
-	@echo "  make up-signoz ch.10: start the SigNoz stack (traces+metrics+logs, signoz profile)"
+	@echo "  make down-pipeline ch.7: stop the CI server (keeps its data volume)"
+	@echo "  make reset-pipeline ch.7: wipe the CI server data volume (jenkins_home)"
+	@echo "  make up-signoz ch.10: start the standalone SigNoz stack (traces+metrics+logs)"
 	@echo "  make down-signoz ch.10: stop the SigNoz stack (keeps its data volumes)"
 	@echo "  make reset-signoz ch.10: wipe the SigNoz data volumes (drops all telemetry)"
+	@echo "  make reset-all wipe everything: app, db, signoz, and jenkins volumes"
 	@echo "  make help    this list"
 
 # Prerequisites gate - see scripts/check.sh
@@ -101,9 +105,17 @@ reset-db:
 	docker compose --profile core down -v
 	$(MAKE) up
 
-# ch.10: bring up the SigNoz observability stack (signoz profile) WITH the
-# core app - the whole point is the app shipping telemetry to it. The
-# profile is opt-in, so a plain `make up` still starts core only.
+# Wipe the core stack (app + postgres) and its data volume (pgdata).
+# Leaves SigNoz completely untouched. Restart with `make up`.
+reset-app:
+	docker compose --profile core down -v
+	@echo "app and db stack wiped (pgdata dropped). SigNoz untouched. Restart: make up"
+
+reset-core: reset-app
+reset: reset-app
+
+# ch.10: bring up the standalone SigNoz observability stack (signoz/compose.yaml).
+# The app ships telemetry to it over the shared signoz-network.
 #
 # First boot = image pulls + one-time schema migration: up to ~3 min.
 # The verify loop does NOT say "all 7 signoz containers are up" - two of
@@ -113,10 +125,7 @@ reset-db:
 # pitfall #1 - data can lag a fresh boot).
 up-signoz:
 	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
-	# --build like `make up`: on a fresh machine the app image doesn't
-	# exist yet, and after the ch.10 flip the app code IS the change - a
-	# stale image re-created (pitfall #2) is the failure this prevents.
-	docker compose --profile core --profile signoz up -d --build
+	docker compose -f signoz/compose.yaml up -d
 	@echo "waiting for SigNoz to finish booting (pulls + schema migration, ~90s first time)..."
 	@ok=no; \
 	for i in $$(seq 1 90); do \
@@ -132,32 +141,27 @@ up-signoz:
 		echo "  docker compose --profile core up -d --force-recreate app   (docs/10 step 3)"; \
 	else \
 		echo "!! signoz did not come up (90s). State:"; \
-		docker compose --profile core --profile signoz ps; \
+		docker compose -f signoz/compose.yaml ps; \
 		echo ""; \
 		echo "   usual suspects (docs/10 pitfalls):"; \
 		echo "   - user-scripts job 'exited (1)' repeatedly: no internet for the one-time"; \
 		echo "     ClickHouse UDF download (signoz/README.md 'the one outbound call')"; \
 		echo "   - clickhouse stuck 'starting': it waits for keeper + user-scripts (bring-up order)"; \
-		echo "   - collector log tail:"; docker compose --profile signoz logs --tail 10 signoz-ingester 2>&1; \
+		echo "   - collector log tail:"; docker compose -f signoz/compose.yaml logs --tail 10 ingester 2>&1; \
 		exit 1; \
 	fi
 
 # ch.10: stop the SigNoz stack - `stop`, not `down`: signoz-network is
-# shared with the running app (ch.10's Option A), and `down` would trip
-# over it. SigNoz's 4 data volumes are kept - the next up-signoz resumes.
+# shared with the running app, and `down` would trip over it. SigNoz's 4
+# data volumes are kept - the next up-signoz resumes.
 down-signoz:
-	docker compose --profile signoz stop
+	docker compose -f signoz/compose.yaml stop
 	@echo "signoz stopped (data kept). Restart: make up-signoz"
 
-# ch.10: wipe ONLY SigNoz's telemetry data (its 4 named volumes) - never
-# `down -v`, which would also drop pgdata (your notes, the ch.5 gotcha in
-# reverse). Volume names carry the project prefix (devops_course_).
+# ch.10: wipe ONLY SigNoz's telemetry data (its 4 named volumes) via its standalone
+# compose project - leaves notes (pgdata) untouched.
 reset-signoz:
-	-@docker compose --profile signoz stop
-	docker volume rm devops_course_signoz-metastore-postgres-0-data \
-	  devops_course_signoz-telemetrykeeper-0-data \
-	  devops_course_signoz-telemetrystore-0-0-data \
-	  devops_course_signoz-telemetrystore-user-scripts
+	docker compose -f signoz/compose.yaml down -v
 	@echo "signoz volumes wiped (a fresh boot re-runs the one-time migration). Notes (pgdata) untouched."
 
 # ch.5's secrets habit: the same scan that pre-commit runs, on demand.
@@ -225,6 +229,32 @@ pipeline:
 		echo "   log tail:"; docker logs --tail 10 "$$cid" 2>&1; exit 1; \
 	fi
 
+# ch.7: stop the CI server (keeps jenkins_home data volume).
+down-pipeline:
+	docker compose $(JENKINS_ENV_FLAGS) -f jenkins/docker-compose.yml down
+	@echo "jenkins stopped (data kept). Restart: make pipeline"
+
+down-jenkins: down-pipeline
+
+# ch.7: wipe the CI server data volume (jenkins_home).
+# Leaves app, db, and SigNoz untouched.
+reset-pipeline:
+	docker compose $(JENKINS_ENV_FLAGS) -f jenkins/docker-compose.yml down -v
+	@echo "jenkins stack wiped (jenkins_home dropped). App, db, and SigNoz untouched. Restart: make pipeline"
+
+reset-jenkins: reset-pipeline
+
+# Wipe everything across all compose stacks: app, postgres db, standalone SigNoz, and Jenkins CI server.
+reset-all:
+	@echo "==> wiping core stack (app + db)..."
+	-docker compose --profile core down -v
+	@echo "==> wiping SigNoz stack..."
+	-docker compose -f signoz/compose.yaml down -v
+	@echo "==> wiping Jenkins CI stack..."
+	-docker compose $(JENKINS_ENV_FLAGS) -f jenkins/docker-compose.yml down -v
+	@echo ""
+	@echo "all stacks wiped (app, db, signoz, jenkins). Everything clean."
+
 # ch.8: the HUMAN deploy path - the machine's is the pipeline's Deploy stage
 # (the SAME server/deploy.sh, different key + tag). Here a student runs the
 # target-aware script directly, with THEIR OWN key (.env's SERVER_SSH_KEY),
@@ -239,4 +269,4 @@ deploy:
 	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
 	@if [ -n "$(TAG)" ]; then bash server/deploy.sh "$(TAG)"; else bash server/deploy.sh; fi
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs pipeline deploy up-signoz down-signoz reset-signoz
+.PHONY: help check run test lint lint-fix build run-docker up down reset-app reset-core reset reset-db scan logs pipeline down-pipeline down-jenkins reset-pipeline reset-jenkins reset-all deploy up-signoz down-signoz reset-signoz

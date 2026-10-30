@@ -17,6 +17,7 @@ Environment knobs:
   OTEL_EXPORTER      "console" (default) or "otlp" (SigNoz).
   OTEL_OTLP_ENDPOINT default "http://localhost:4317" (in compose: http://signoz:4317).
   OTEL_SERVICE_NAME  default "notes-app".
+  OTEL_PYTHON_FASTAPI_EXCLUDED_URLS default "health" (omits /health from traces).
 """
 
 import os
@@ -59,7 +60,10 @@ def setup_otel(app) -> None:
 
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-    FastAPIInstrumentor.instrument_app(app)
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls=os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", "health"),
+    )
 
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
