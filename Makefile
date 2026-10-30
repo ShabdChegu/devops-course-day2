@@ -113,7 +113,10 @@ reset-db:
 # pitfall #1 - data can lag a fresh boot).
 up-signoz:
 	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
-	docker compose --profile core --profile signoz up -d
+	# --build like `make up`: on a fresh machine the app image doesn't
+	# exist yet, and after the ch.10 flip the app code IS the change - a
+	# stale image re-created (pitfall #2) is the failure this prevents.
+	docker compose --profile core --profile signoz up -d --build
 	@echo "waiting for SigNoz to finish booting (pulls + schema migration, ~90s first time)..."
 	@ok=no; \
 	for i in $$(seq 1 90); do \
