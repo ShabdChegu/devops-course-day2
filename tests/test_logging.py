@@ -1,7 +1,7 @@
 """ch.6's test: the log CONTRACT, not just "did it log".
 
 The whole point of structured logging is that every line the app emits is a
-JSON object a *machine* can parse. What `make logs` (and ch.13's collector)
+JSON object a *machine* can parse. What `make logs` (and ch.10's collector)
 reads is exactly `JsonFormatter`'s output - so this test attaches a handler
 that runs records through the *same* formatter the app uses, and asserts
 every resulting line json.loads()s.

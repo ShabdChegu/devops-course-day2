@@ -57,8 +57,8 @@ class NoteRow(Base):
 
 
 # Create the table on import (no-op if it already exists). This is the whole
-# of this course's migrations story - ch.14 mentions `alembic` as the real
-# tool when schemas start evolving.
+# of this course's migrations story - a later chapter may bring in `alembic`
+# as the real tool when schemas start evolving.
 Base.metadata.create_all(engine)
 
 

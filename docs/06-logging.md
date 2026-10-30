@@ -18,7 +18,7 @@ per line:
 {"time": "2026-10-28T16:56:43Z", "level": "INFO", "logger": "notes_app.views", "message": "note created", "event": "note_created", "note_id": 3}
 ```
 
-Now every field is queryable — by `jq` on the terminal, and (ch.13) by
+Now every field is queryable — by `jq` on the terminal, and (ch.10) by
 SigNoz's log receiver. The format you pick **today** is what the whole
 observability arc builds on.
 
@@ -31,11 +31,11 @@ Two ideas carry this chapter, both small on purpose:
   (Docker) captures the container's two pipes; you never `scp` into a box
   to read logs. So the app logs to **stdout**, and `docker logs` /
   `make logs` is how you read it. That's it — no log files, no rotation.
-  (Real log *shipping* to a store is ch.13's job, and it ships *this*
+  (Real log *shipping* to a store is ch.10's job, and it ships *this*
   stream.)
 
 And one quiet payoff: logging is configured in **one small module** and
-turned on with **one call** in `main.py`, so ch.10 adding `trace_id` is a
+turned on with **one call** in `main.py`, so ch.9 adding `trace_id` is a
 one-line change, not a rewrite.
 
 ## What changed in this branch
@@ -111,7 +111,7 @@ make test        # test_logging.py asserts each stdout line json.loads()s
    isn't read by `docker logs`, dies with the container, and is exactly the
    "state trapped in the box" problem ch.4/5 solved for *data*. Logs are the
    same kind of thing: keep them on stdout; *shipping* them somewhere durable
-   is ch.13's job.
+   is ch.10's job.
 
 ## Stretch exercise
 
@@ -132,7 +132,7 @@ two sentences why adding that field required touching *only* the formatter's
 4. Why is `propagate = False` set on `uvicorn.access` *and* the handler
    list replaced on the root logger — what's the symptom if you get either
    wrong?
-5. ch.10 will add `trace_id` to every line. Where does that change live, and
+5. ch.9 will add `trace_id` to every line. Where does that change live, and
    why is this design a good thing for that moment?
 
 <details>
@@ -183,7 +183,7 @@ two sentences why adding that field required touching *only* the formatter's
 
 The two-service ch.5 topology gains a **machine-readable stream**, not a new
 service: the app's structured logs ride its stdout pipe to `docker logs` /
-`make logs` today, and to SigNoz's collector in ch.13.
+`make logs` today, and to SigNoz's collector in ch.10.
 
 ```mermaid
 flowchart LR
@@ -192,7 +192,7 @@ flowchart LR
         db[("postgres:16")]
         app -->|postgresql+psycopg| db
     end
-    app -->|"JSON stdout"| out["make logs / docker logs<br/>(ch.13: SigNoz collector)"]
+    app -->|"JSON stdout"| out["make logs / docker logs<br/>(ch.10: SigNoz collector)"]
 ```
 
 Next chapter (ch.7) adds **Jenkins** to this compose file and wires the

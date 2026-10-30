@@ -3,7 +3,7 @@
 ch.1's point was that `make test` works from day one. ch.3 adds the HTML
 face, so this file now covers both: the JSON API (the "API") and the
 browser-rendered pages (the "UI"). ch.2's persistence proof lives in
-test_smoke.py; the full CI-ready suite grows in ch.14.
+test_smoke.py; the full CI-ready suite grows in ch.11.
 """
 
 from fastapi.testclient import TestClient

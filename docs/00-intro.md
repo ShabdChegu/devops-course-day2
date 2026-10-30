@@ -5,14 +5,14 @@ After this chapter you can set up the environment, explain the course's
 branch-per-concept model, and navigate the repo.
 
 ## Concept
-The course builds one tiny app — the **Notes app** — across 15 branches, adding
+The course builds one tiny app — the **Notes app** — across 12 branches, adding
 exactly one DevOps concept per branch. Why one concept at a time? DevOps topics
 compound: you can't appreciate CI without having code that builds, and you can't
 appreciate health checks without a container to attach them to. Each branch is a
 complete, working snapshot, so you can check out any one in isolation.
 
 **Branches are side-by-side, not merged into each other.** `main` is ch.0;
-`15-recap` is the final state. Teach/learn linearly by checking out each branch
+`12-recap` is the final state. Teach/learn linearly by checking out each branch
 in order; each already contains everything the previous branch had.
 
 ## What changed in this branch
@@ -36,7 +36,7 @@ No app code yet — that's ch.1's job.
 
 ## Common pitfalls
 - **`make check` flags a busy port.** A tool you already run locally (a real
-  Postgres on 5432, a Grafana on 3000/9090) is squatting on a course port.
+  Postgres on 5432, a SigNoz UI on 8080) is squatting on a course port.
   The message names the port; use `lsof -iTCP:<port> -P` (macOS) or
   `ss -ltnp | grep :<port>` (Linux) to find the process.
 - **The docker daemon is "not reachable" but Docker seems installed.** The
@@ -66,7 +66,7 @@ note one difference (e.g. a busy port you discovered by doing it twice).
 2. Tools (git/uv/docker), a reachable docker daemon, and that the course's
    ports are free. It pre-empts the #1 "doesn't work on my machine" cause:
    a dead daemon or a port clash.
-3. `15-recap`.
+3. `12-recap`.
 
 </details>
 

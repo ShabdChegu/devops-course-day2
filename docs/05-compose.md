@@ -208,7 +208,7 @@ filesystem is ephemeral — the same trap ch.4 left you on purpose.)
 
 The ch.4 single-box-with-a-file becomes a **two-service topology**: the app
 and a dedicated database, on one private network, data on a named volume.
-This is the shape every later chapter (CI ch.7, observability ch.11–13)
+This is the shape every later chapter (CI ch.7, observability ch.9–10)
 builds *around* — they add more boxes; these two stay the core.
 
 ```mermaid

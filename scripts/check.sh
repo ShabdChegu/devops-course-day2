@@ -3,8 +3,7 @@
 # Verifies, with actionable messages:
 #   - tools present: git, uv, docker
 #   - docker daemon reachable
-#   - course ports free: 8000 (app) 5432 (postgres) 9090 (prometheus)
-#     16686 (jaeger) 8080/9095 (signoz) 13000 (jenkins)
+#   - course ports free: 8000 (app) 5432 (postgres) 8080/9095 (signoz) 13000 (jenkins)
 set -u
 fail=0
 
@@ -43,7 +42,7 @@ done
 if [ -n "$PY" ]; then
   busy=$("$PY" - <<'PYEOF'
 import socket
-ports = [8000, 5432, 9090, 16686, 8080, 9095, 13000]
+ports = [8000, 5432, 8080, 9095, 13000]
 busy = []
 for p in ports:
     s = socket.socket()
@@ -82,7 +81,7 @@ PYEOF
     done
     fail=1
   else
-    echo "  ok    ports free: 8000 5432 9090 16686 8080 9095 13000"
+    echo "  ok    ports free: 8000 5432 8080 9095 13000"
   fi
 else
   echo "  warn  no system python 3.7+ found - skipping port check"

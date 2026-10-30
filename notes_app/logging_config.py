@@ -3,12 +3,12 @@
 ch.6's whole idea in one place:
 - A log line is ONE JSON object on ONE line:
   {"time": "...", "level": "INFO", "logger": "...", "message": "...", "event": "..."}
-  Machines (docker logs, ch.13's log collector) parse fields;
+  Machines (docker logs, ch.10's log collector) parse fields;
   they do not read sentences.
 - A container's log IS its stdout: the runtime captures the process's pipe,
   and `docker logs` / `make logs` read exactly that capture. No files.
 
-Later changes stay one line each: ch.10 adds "trace_id" to _FIELDS below.
+Later changes stay one line each: ch.9 adds "trace_id" to _FIELDS below.
 """
 
 import json
@@ -39,7 +39,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        # Our event fields (event / note_id / title; ch.10: trace_id)
+        # Our event fields (event / note_id / title; ch.9: trace_id)
         # arrive via logger.info(..., extra={...}) and are picked up by name here.
         for key in _FIELDS:
             if key in record.__dict__:
@@ -56,7 +56,7 @@ def setup_logging() -> None:
     # stdout on purpose: in a container the runtime captures the process's
     # pipes, and that capture *is* the log (`docker logs`). Python's default
     # StreamHandler() writes to stderr - fine for a CLI tool, but our story
-    # is "app output -> stdout -> docker logs -> ch.13's collector", so we
+    # is "app output -> stdout -> docker logs -> ch.10's collector", so we
     # say it explicitly.
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())

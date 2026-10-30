@@ -9,9 +9,10 @@
 #   make pipeline   # ch.7: start the jenkins/ compose project
 #
 # Profiles bound the footprint (PLAN item #3): `core` = app + db, and
-# everything later chapters add (monitoring ch.11, jaeger ch.12, signoz
-# ch.13) gets its OWN profile so a 4GB laptop never has to run all of
-# it. `make up` starts core only, by design.
+# everything later chapters add (signoz ch.10; the archived
+# Prometheus/Grafana + Jaeger variant would add its own) gets its OWN
+# profile so a 4GB laptop never has to run all of it. `make up` starts
+# core only, by design.
 
 services:
   app:

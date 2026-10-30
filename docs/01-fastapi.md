@@ -42,7 +42,7 @@ on:
 
 App code lives in a **package** — `notes_app/` (named after the project) — not
 scattered at the repo root. `notes_app/main.py` is the module uvicorn imports
-(`notes_app.main:app`). ch.6's `logging_config.py` and ch.10's `otel.py` land
+(`notes_app.main:app`). ch.6's `logging_config.py` and ch.9's `otel.py` land
 in this same folder. No `.gitignore` changes on this branch (`.venv/`,
 `__pycache__/` were already ignored in ch.0). And note what's **not** in git:
 `.venv/`. What *is*: `uv.lock` — that contrast is the whole lesson.
