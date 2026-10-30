@@ -1,6 +1,6 @@
 # DevOps course command surface. Grows one target group per chapter:
 #   ch.0 check+help | ch.1 run/test/lint | ch.4 build | ch.5 up/down
-#   ch.6 logs | ch.7 pipeline | ch.8 deploy | ch.15 polish
+#   ch.6 logs | ch.7 pipeline | ch.8 deploy | ch.12 polish
 
 IMAGE ?= notes-app
 
@@ -21,6 +21,8 @@ help:
 	@echo "  make reset-db  wipe the postgres volume + re-init from .env (drops all notes)"
 	@echo "  make scan    secret scan (the pre-commit hook + CI run this same script)"
 	@echo "  make logs    tail the app's structured (JSON) logs from the stack"
+	@echo "  make deploy    ch.8: run server/deploy.sh (the target-aware deploy; TAG=<img:tag>)"
+	@echo "  make pipeline  ch.7: start the CI server (Jenkins, its own compose project)"
 	@echo "  make help    this list"
 
 # Prerequisites gate - see scripts/check.sh
@@ -45,8 +47,8 @@ build:
 # ch.5: start/stop the core stack (app + postgres). `up` rebuilds the app
 # image first, then runs the core profile detached. Only core - the CI
 # server is a SEPARATE project (jenkins/docker-compose.yml, ch.7: one file
-# = one machine), and monitoring / jaeger / signoz stay OFF until their
-# chapters add a profile.
+# = one machine), and signoz (ch.10) stays OFF until its chapter adds the
+# profile.
 # .env is created from .env.example on first run so `make up` just works;
 # change the password in .env before you rely on it (it never gets committed).
 up:
@@ -159,4 +161,18 @@ pipeline:
 		echo "   log tail:"; docker logs --tail 10 "$$cid" 2>&1; exit 1; \
 	fi
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs pipeline
+# ch.8: the HUMAN deploy path - the machine's is the pipeline's Deploy stage
+# (the SAME server/deploy.sh, different key + tag). Here a student runs the
+# target-aware script directly, with THEIR OWN key (.env's SERVER_SSH_KEY),
+# so no VPS is ever required: SERVER_HOST=127.0.0.1 (the default) deploys to
+# this machine; SERVER_HOST=<ip> is the identical command over ssh.
+#
+# No argument -> the .env's APP_IMAGE (notes-app:latest, ch.4's local image).
+# TAG=<img:tag> -> deploy a specific pushed tag (ch.7's registry ref). deploy.sh
+# is target-aware (local vs remote) and idempotent - re-running the same tag
+# changes nothing (the lesson, docs/08). It verifies by curl, not exit code.
+deploy:
+	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
+	@if [ -n "$(TAG)" ]; then bash server/deploy.sh "$(TAG)"; else bash server/deploy.sh; fi
+
+.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs pipeline deploy

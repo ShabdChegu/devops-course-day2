@@ -57,8 +57,11 @@ part of either key.
 
 ```bash
 # human, from your machine (your key, .env's vars):
-make deploy                 # runs server/deploy.sh: local target pulls notes-app:latest
-make deploy amanupadhyay32/notes-app:7690713   # or a specific pushed tag
+make deploy                            # no arg: the .env's APP_IMAGE (local target pulls it)
+make deploy TAG=amanupadhyay32/notes-app:7690713   # or a specific pushed tag
+# (TAG=..., not a positional arg: make turns extra words into GOALS -
+# `make deploy <img>` would run `deploy` and then look for a target named
+# `<img>` and die "No rule to make target")
 
 # machine, no human at all:
 # push a commit -> Poll SCM H/5 fires ch.7's pipeline -> its new Deploy

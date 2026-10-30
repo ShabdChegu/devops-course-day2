@@ -30,6 +30,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$HERE")"
 if [ -f "$REPO_DIR/.env" ]; then set -a; . "$REPO_DIR/.env"; set +a; fi
+# Human path (make deploy / bare bash): .env's SERVER_SSH_KEY supplies the
+# private key. Pipeline path: the Jenkins credential file wins (set before
+# we run - see the Jenkinsfile's Deploy stage). Neither set -> OpenSSH's
+# default keys (~/.ssh/id_ed25519 etc.).
+DEPLOY_SSH_KEY_FILE="${DEPLOY_SSH_KEY_FILE:-${SERVER_SSH_KEY:-}}"
 SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
 SERVER_PORT="${SERVER_PORT:-8000}"
 # Track whether the caller (or .env) EXPLICITLY set BOX_DIR - that's the
@@ -40,8 +45,9 @@ BOX_DIR="${BOX_DIR:-$HOME/devops-course-server}"
 
 # $1 = the image reference to run: ch.7's pushed tag
 # (user/notes-app:<sha7> - the pipeline passes THIS build's SHA), or no
-# argument -> notes-app:latest, ch.4's local image (local dev).
-IMAGE="${1:-notes-app:latest}"
+# argument -> the .env's APP_IMAGE (local dev, sourced above; defaults to
+# notes-app:latest - ch.4's local image).
+IMAGE="${1:-${APP_IMAGE:-notes-app:latest}}"
 
 is_local=no
 case "$SERVER_HOST" in 127.*|localhost) is_local=yes ;; esac

@@ -8,6 +8,11 @@
 #   * trivy         -> the image-scan stage gates the built image: `docker
 #                      save` exports it to a tar, trivy reads the tar
 #                      (it has its own empty store, not the host's)
+#   * docker compose-> the v2 CLI *plugin* (separate binary the CLI discovers
+#                      in a cli-plugins dir). ch.8's CD dry-run target
+#                      (SERVER_HOST=127.0.0.1) runs `docker compose` INSIDE
+#                      the controller to point the app stack at the pushed
+#                      tag - so the plugin must ship in this image
 #
 # The plugin families (git, pipeline) are NOT in here: on your FIRST run
 # you install them through the UI - that one manual step is where you learn
@@ -33,6 +38,7 @@ USER root
 ARG UV_VERSION=0.13.6
 ARG DOCKER_VERSION=28.5.0
 ARG TRIVY_VERSION=0.76.1
+ARG COMPOSE_VERSION=5.6.1
 
 # No apt layer: the image already ships curl + the CA bundle + git.
 # (The first draft of this file apt-installed ca-certificates and failed -
@@ -64,6 +70,42 @@ RUN set -eux; \
     ln -sf /opt/docker/docker /usr/local/bin/docker; \
     rm /tmp/docker.tgz; \
     /usr/local/bin/docker --version
+
+# docker compose (v2 plugin): ch.8's local dry-run runs `docker compose` in
+# the CONTROLLER (SERVER_HOST=127.0.0.1 - deploy.sh points the app stack at
+# the pushed tag, the box pulls nothing), so the v2 binary must be in this
+# image: `docker compose` is just the docker CLI + a discovered plugin
+# binary - one file, no daemon, no service.
+#
+# The asset is a PER-ARCH STATIC BINARY (docker-compose-linux-<arch>),
+# NOT the per-distro .deb - a .deb would pin this image to one distro,
+# and a static binary next to the docker CLI is how Docker ships the
+# plugin itself. Same per-arch pick as the docker CLI block: amd64
+# (x86_64) for the class's Linux boxes, aarch64 for M-series Macs
+# running Docker's buildkit linux/arm64.
+#
+# Where it goes: /usr/local/lib/docker/cli-plugins/ - the docker CLI
+# searches that dir (and /usr/lib/docker/cli-plugins) for plugins by
+# NAME ("docker" + plugin-name = "docker compose"). chmod 755, because
+# an unexecutable plugin binary is the #1 "docker: unknown command
+# 'compose'" cause.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+        amd64) target=x86_64 ;; \
+        arm64) target=aarch64 ;; \
+        *) echo "unsupported arch: $arch"; exit 1 ;; \
+    esac; \
+    # The compose asset URL: docker/compose releases (the compose v2
+    # repo), asset name "docker-compose-linux-${target}" - note the
+    # release tag is VERSION-PREFICED in the path (v${VER}) but the
+    # FILENAME is not, exactly like trivy's (docs/07 pitfall).
+    curl -fsSL "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${target}" -o /usr/local/bin/docker-compose; \
+    chmod +x /usr/local/bin/docker-compose; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    ln -sf /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose; \
+    /usr/local/bin/docker --version; \
+    /usr/local/bin/docker compose version
 
 # trivy: the image-scan stage (docs/07) gates the built image on
 # CRITICAL CVEs in the libs we ship. One static binary, same per-arch
