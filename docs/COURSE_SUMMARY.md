@@ -634,7 +634,7 @@ flowchart TD
 
 <div style="page-break-after: always;"></div>
 
-## Chapter 10: Full-Stack Observability with SigNoz
+## Chapter 10: Full-Stack Observability with SigNoz & OpenTelemetry
 
 > **Milestone**: Deploy a self-hosted full-stack APM cluster in Docker and prove root-cause identification within seconds via a live database-outage drill.
 
@@ -647,40 +647,195 @@ flowchart TD
 | Observability is only theoretical; never tested under failure | **Live Incident Drill** (`docker compose stop postgres`) | Watch `/ready` flip to 503, error rate spike to 100%, and SLO alarm fire |
 | Expensive SaaS bills for cloud monitoring platforms | **Self-hosted Open-Source APM** | Full telemetry stack running on-premise or inside private cloud |
 
-### Telemetry Pipeline & Incident Drill Flow
+---
+
+### 10.1 Complete SigNoz Docker Compose Microservice Architecture
+
+The SigNoz stack running via `signoz/compose.yaml` is composed of 7 specialized containers coordinated across a dedicated bridge network (`signoz-network`):
 
 ```mermaid
 flowchart TD
-    subgraph Application["FastAPI Application (notes-app)"]
-        Routes["HTTP Handlers"]
-        ORM["SQLAlchemy ORM"]
-        OTelExporter["OTel gRPC Exporter (port 4317)"]
-        
-        Routes --> ORM --> OTelExporter
+    subgraph ClientLayer["Application Layer (notes-app)"]
+        App["notes-app (:8000)<br/>• FastAPIInstrumentor<br/>• SQLAlchemyInstrumentor<br/>• OTLP gRPC Exporter"]
     end
 
-    subgraph SigNozStack["Self-Hosted SigNoz Stack (signoz profile)"]
-        Ingester["signoz-ingester<br/>(OTel Collector :4317/:4318)"]
-        CH[("ClickHouse DB<br/>Columnar Storage for Spans")]
-        UI["SigNoz Web UI :8080<br/>Traces, Metrics, SLO Dashboards"]
-        
-        OTelExporter -->|"OTLP gRPC Spans"| Ingester
-        Ingester -->|"Bulk Batch Write"| CH
-        UI -->|"Fast Columnar Queries"| CH
+    subgraph OTelIngestion["Telemetry Intake & Processing"]
+        Ingester["ingester (:4317 / :4318)<br/><i>signoz-otel-collector</i><br/>Receives OTLP, parses, batches"]
+        Migrator["signoz-telemetrystore-migrator<br/><i>(One-shot migration container)</i><br/>Creates ClickHouse tables & schema"]
     end
 
-    subgraph IncidentDrill["The Incident Drill (make drill-db-down)"]
-        KillCmd["docker compose stop postgres"]
-        Traffic["curl traffic generator"]
-        Spike["1. /ready returns HTTP 503<br/>2. Error rate spikes to 100%<br/>3. Red trace waterfall shows DB refused"]
-        
-        KillCmd --> Traffic --> Spike
+    subgraph StorageCluster["Telemetry Storage Engine (ClickHouse OLAP)"]
+        Keeper["signoz-telemetrykeeper-clickhousekeeper-0 (:9181)<br/><i>Raft consensus & coordination</i>"]
+        Scripts["signoz-telemetrystore-clickhouse-user-scripts<br/><i>(One-shot installer)</i><br/>Installs histogramQuantile binary"]
+        CH[("signoz-telemetrystore-clickhouse-0-0 (:9000 / :8123)<br/><i>Columnar OLAP Storage</i><br/>• signoz_traces<br/>• signoz_logs<br/>• signoz_metrics")]
     end
+
+    subgraph AppStateStore["SigNoz Metadata Storage (PostgreSQL ACID)"]
+        PGMeta[("signoz-metastore-postgres-0 (:5432)<br/><i>PostgreSQL 16 Relational Store</i><br/>• Users & Orgs<br/>• Dashboards & Panels<br/>• Alert Rules & Notifications")]
+    end
+
+    subgraph UserInterface["Query Engine & Visualization Portal"]
+        SigUI["signoz-signoz-0 (:8080)<br/><i>Frontend UI + Query Engine</i><br/>• Trace waterfall graphs<br/>• Flamegraphs & APM views<br/>• Query aggregation"]
+    end
+
+    %% Network links & dependencies
+    App -->|"OTLP gRPC :4317"| Ingester
+    Migrator -.->|"Bootstraps Schema"| CH
+    Keeper ---|"Raft Sync :9181"| CH
+    Scripts -.->|"Mounts Binary"| CH
+    Ingester -->|"TCP :9000 Bulk Write"| CH
+
+    SigUI -->|"TCP :9000 Query Telemetry"| CH
+    SigUI -->|"TCP :5432 Read/Write Metadata"| PGMeta
+```
+
+---
+
+<div style="page-break-after: always;"></div>
+
+### 10.2 OpenTelemetry Collector (`ingester`) Internal Pipeline
+
+The `ingester` container runs the SigNoz OpenTelemetry Collector distribution with a multi-stage pipeline defined in `signoz/ingester/ingester.yaml`:
+
+```mermaid
+flowchart LR
+    subgraph Receivers["1. Receivers (Entrypoint)"]
+        direction TB
+        R_gRPC["OTLP gRPC (:4317)<br/>Traces, Metrics, Logs"]
+        R_HTTP["OTLP HTTP (:4318)<br/>JSON & Protobuf"]
+    end
+
+    subgraph Processors["2. Processors (Transform & Aggregate)"]
+        direction TB
+        P_SpanMetrics["signozspanmetrics/delta<br/><i>Calculates latency buckets & rates</i>"]
+        P_SpanMapper["signozspanmapper<br/><i>Maps tags & exceptions</i>"]
+        P_Pricing["signozllmpricing<br/><i>Token cost tracker</i>"]
+        P_Batch["batch processor<br/><i>Max 50,000 items / 5s timeout</i>"]
+        
+        P_SpanMetrics --> P_SpanMapper --> P_Pricing --> P_Batch
+    end
+
+    subgraph Exporters["3. Exporters (ClickHouse Writers)"]
+        direction TB
+        E_Traces["clickhousetraces<br/>-> signoz_traces"]
+        E_Logs["clickhouselogsexporter<br/>-> signoz_logs"]
+        E_Metrics["signozclickhousemetrics<br/>-> signoz_metrics"]
+        E_Meta["metadataexporter<br/>-> signoz_metadata"]
+    end
+
+    subgraph Destination["4. ClickHouse OLAP DB"]
+        CH_DB[("ClickHouse TCP :9000")]
+    end
+
+    R_gRPC --> P_SpanMetrics
+    R_HTTP --> P_SpanMetrics
+    P_Batch --> E_Traces
+    P_Batch --> E_Logs
+    P_Batch --> E_Metrics
+    P_Batch --> E_Meta
+    E_Traces --> CH_DB
+    E_Logs --> CH_DB
+    E_Metrics --> CH_DB
+    E_Meta --> CH_DB
+```
+
+---
+
+### 10.3 Application-Side OpenTelemetry Instrumentation Architecture
+
+Inside `notes_app/otel.py`, the Python runtime is instrumented with zero changes to business routes:
+
+```mermaid
+flowchart TD
+    subgraph Inbound["Incoming HTTP Traffic"]
+        Req["HTTP GET/POST /notes"]
+    end
+
+    subgraph AppInstrumentation["notes_app Runtime (FastAPI + OTel)"]
+        direction TB
+        MW["FastAPIInstrumentor Middleware<br/><i>Generates Server Span + W3C traceparent</i>"]
+        Controller["views.py Handler"]
+        SQLMW["SQLAlchemyInstrumentor<br/><i>Generates Child DB Client Span</i>"]
+        Meters["MeterProvider Middleware<br/><i>http_requests_total & http_request_duration_seconds</i>"]
+        Logger["LoggingHandler (Python logging)<br/><i>Injects trace_id into JSON log lines</i>"]
+        
+        MW --> Controller
+        Controller --> SQLMW
+        Controller --> Meters
+        Controller --> Logger
+    end
+
+    subgraph Exporters["OpenTelemetry SDK Batch Processors"]
+        SpanBatch["BatchSpanProcessor<br/>(OTLPSpanExporter)"]
+        MetricReader["PeriodicExportingMetricReader<br/>(2000ms flush interval)"]
+        LogBatch["BatchLogRecordProcessor<br/>(OTLPLogExporter)"]
+        
+        MW -.-> SpanBatch
+        SQLMW -.-> SpanBatch
+        Meters -.-> MetricReader
+        Logger -.-> LogBatch
+    end
+
+    subgraph Transport["OTLP Transport Layer"]
+        gRPC["gRPC Channel :4317<br/><code>http://signoz:4317</code>"]
+    end
+
+    Req --> MW
+    SpanBatch --> gRPC
+    MetricReader --> gRPC
+    LogBatch --> gRPC
+```
+
+---
+
+<div style="page-break-after: always;"></div>
+
+### 10.4 SigNoz Service & Container Catalog
+
+| Service / Container | Base Docker Image | Network & Ports | Lifecycle | Data Role & Responsibilities |
+|:---|:---|:---:|:---:|:---|
+| **`ingester`** | `signoz/signoz-otel-collector:latest` | `signoz-network`<br/>`4317` (gRPC), `4318` (HTTP) | Daemon | High-throughput OTel telemetry intake. Processes spans, generates span-metrics, batches writes to ClickHouse. |
+| **`signoz-telemetrystore-migrator`** | `signoz/signoz-otel-collector:latest` | `signoz-network` | One-shot Job | Executes ClickHouse DDL migrations (`migrate bootstrap && sync up`). Creates databases, tables, and materialized views. |
+| **`signoz-telemetrystore-clickhouse-user-scripts`** | `clickhouse/clickhouse-server:25.12.5` | `signoz-network` | One-shot Job | Downloads and installs the custom `histogram-quantile` binary into the shared volume for p50/p90/p99 calculations. |
+| **`signoz-telemetrykeeper-clickhousekeeper-0`** | `clickhouse/clickhouse-keeper:25.12.5` | `signoz-network`<br/>`9181` (Raft client) | Daemon | Raft consensus keeper (ZooKeeper replacement). Coordinates metadata, distributed locks, and mutations for ClickHouse. |
+| **`signoz-telemetrystore-clickhouse-0-0`** | `clickhouse/clickhouse-server:25.12.5` | `signoz-network`<br/>`9000` (Native TCP), `8123` (HTTP) | Daemon | Columnar OLAP database. Stores compressed traces, spans, logs, and metrics for analytical querying at scale. |
+| **`signoz-metastore-postgres-0`** | `postgres:16` | `signoz-network`<br/>`5432` (Internal) | Daemon | Relational PostgreSQL metadata store for user accounts, organizations, dashboard configurations, and alert rules. |
+| **`signoz-signoz-0`** | `signoz/signoz:latest` | `signoz-network`<br/>`8080:8080` (Host Web UI) | Daemon | Unified UI and query engine. Queries ClickHouse for telemetry waterfalls and PostgreSQL for dashboard layouts. |
+
+---
+
+### 10.5 The Incident Drill: Proving Root-Cause Identification
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Engineer as SRE / Engineer
+    participant App as FastAPI notes-app
+    participant DB as PostgreSQL (5432)
+    participant Ingest as OTel Ingester (4317)
+    participant CH as ClickHouse
+    participant SigUI as SigNoz UI (8080)
+
+    Engineer->>DB: Kill DB: docker compose stop postgres
+    Engineer->>App: Send traffic: curl http://localhost:8000/notes
+    
+    Note over App, DB: Application attempts SQL query
+    App-xDB: Connection Refused (PostgreSQL down)
+    App->>App: Mark span status: ERROR (500)<br/>Record exception: psycopg.OperationalError
+    
+    App->>Ingest: Export error span via OTLP gRPC
+    Ingest->>CH: Batch insert error trace
+    
+    Engineer->>SigUI: Open http://127.0.0.1:8080
+    SigUI->>CH: Query error rate & traces
+    CH-->>SigUI: Return trace with red exclamation mark
+    
+    SigUI-->>Engineer: Flamegraph shows root cause:<br/>• Parent span: GET /notes (500 Internal Server Error)<br/>• Child span: db.query SELECT notes (Failed: Connection Refused)
 ```
 
 ### Technical Specs & Use Case
 
-* **Primary Tech**: SigNoz, OpenTelemetry Collector, ClickHouse Columnar DB, OTLP gRPC.
+* **Primary Tech**: SigNoz, OpenTelemetry Collector, ClickHouse Columnar DB, ClickHouse Keeper, PostgreSQL, OTLP gRPC/HTTP.
 * **Key Commands**: `make up-signoz` (launches APM on `:8080`), `make down-signoz`, `make reset-signoz`.
 * **Industry Use Case**: SRE and production support—diagnosing microsecond latency regressions and cascading downstream outages in seconds without digging through gigabytes of flat log files.
 
