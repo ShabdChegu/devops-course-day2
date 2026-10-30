@@ -59,7 +59,9 @@ up:
 	# says "running" for a few seconds while the process is still booting,
 	# so state alone races the crash: the real question is "is the app
 	# answering?". Wait up to 30s for an HTTP 200, or a terminal state.
-	# The #1 silent failure is a Postgres auth mismatch (docs/05 pitfall #1).
+	# ch.9's /ready could answer here too, but /notes is deliberate: it
+	# proves the DB seam works end-to-end, not just that the server boots
+	# - the #1 silent failure is a Postgres auth mismatch (docs/05 #1).
 	@cid=$$(docker compose --profile core ps -q -a app | head -1); \
 	ok=no; state=missing; \
 	for i in $$(seq 1 30); do \

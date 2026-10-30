@@ -14,3 +14,11 @@ from pathlib import Path
 # so a half-finished run can't corrupt the one the app uses.
 _tmp_db_dir = tempfile.mkdtemp(prefix="notes-test-db-")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_tmp_db_dir) / 'test-notes.db'}"
+
+# ch.9: keep the OpenTelemetry machinery OUT of the test process. Two
+# reasons: a TracerProvider with a BatchSpanProcessor would keep background
+# flush threads alive between tests, and span output (Console exporter)
+# would interleave with pytest's output. The env var is the off switch
+# otel.py checks at import time - so tests exercise the app exactly like a
+# production deployment would, minus the exporter.
+os.environ["OTEL_ENABLED"] = "false"

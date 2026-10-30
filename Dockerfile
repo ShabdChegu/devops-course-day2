@@ -42,6 +42,15 @@ COPY static/ ./static/
 # Finish the editable install (links /app/notes_app into the venv).
 RUN uv sync --frozen
 
+# ch.9: the liveness probe, in the artifact itself. curl ships with the
+# base image (it does NOT with alpine-slim variants - a common gotcha),
+# and /health is the cheapest honest check: "the HTTP server answers".
+# The readiness version (checks the DB) is the docs/09 stretch exercise.
+# The compose `healthcheck:` in ch.5's file can point at the SAME
+# endpoint, so `depends_on: service_healthy` becomes reliable.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
+    CMD curl -sf http://127.0.0.1:8000/health || exit 1
+
 # Bind 0.0.0.0, not 127.0.0.1: inside a container "localhost" is the
 # container's own loopback - the outside world can only reach 0.0.0.0.
 CMD ["uv", "run", "--no-sync", "uvicorn", "notes_app.main:app", "--host", "0.0.0.0", "--port", "8000"]

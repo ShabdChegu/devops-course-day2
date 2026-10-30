@@ -51,15 +51,16 @@ flowchart LR
     jenkins -->|"docker push user/notes-app:<sha>"| hub
     jenkins -.->|"ssh: deploy.sh"| box
     box -->|"docker pull + compose up -d<br/>(re-pulls that tag)"| hub
-    box -->|"curl /notes: the box answers"| bapp
+    box -->|"curl /ready: the box answers"| bapp
 ```
 
-*As of ch.8: a push to GitHub fires the CI server's pipeline, which lints,
-scans, tests, builds on the host daemon, pushes to Docker Hub, and — the new
-step — **SSHes to the deploy target** (your VPS, or the same machine), where the
-box pulls that exact tag and `compose up -d` swaps the running container.
-One compose file = one machine; the server runs the `server/` kit, not the repo
-clone. Each chapter's doc shows this same diagram at its own snapshot.*
+*As of ch.9: the topology is the ch.8 one — nothing new starts on the
+machine (that's the point of the chapter). What changed is **what the app
+emits**: its stdout now carries ch.6's JSON logs *and* ch.9's traces,
+correlated by a `trace_id` stamped onto every log line a request produces
+(read both with `make logs`). CD's verify also moved to the `/ready` probe.
+SigNoz — the box that finally receives traces — lands in ch.10. Each
+chapter's doc shows this same diagram at its own snapshot.*
 
 ## Branch map
 | # | Branch | Concept |

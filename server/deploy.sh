@@ -63,7 +63,11 @@ if [ "$is_local" = "yes" ]; then
   # `image: ${APP_IMAGE:-notes-app}` (root docker-compose.yml); the deploy
   # just points APP_IMAGE at the new reference.
   deploy_cmd="env APP_IMAGE=$IMAGE docker compose --profile core -f $REPO_DIR/docker-compose.yml $UPSPEC"
-  verify_cmd="curl -sf -o /dev/null http://127.0.0.1:$SERVER_PORT/notes"
+  # ch.9: verify on /ready, not /notes - the readiness probe is the honest
+  # "this instance can take traffic now" check (docs/09). /notes would
+  # still pass even while the app's dependencies are down; /ready is the
+  # contract between deploy and the running app.
+  verify_cmd="curl -sf -o /dev/null http://127.0.0.1:$SERVER_PORT/ready"
 else
   SSH_TARGET="$SERVER_HOST"
   [ -n "${SERVER_USER:-}" ] && SSH_TARGET="$SERVER_USER@$SERVER_HOST"
@@ -112,7 +116,9 @@ else
   # db's init dies "superuser password is not specified" (docs/08 pitfall #4).
   remote_cmd="cd $BOX_REMOTE && env APP_IMAGE=$IMAGE docker compose -f server/docker-compose.yml --env-file .env $UPSPEC"
   deploy_cmd="ssh $SSH_OPTS $SSH_TARGET \"$remote_cmd\""
-  verify_cmd="ssh $SSH_OPTS $SSH_TARGET \"curl -sf -o /dev/null http://127.0.0.1:$SERVER_PORT/notes\""
+  # ch.9: /ready, not /notes - the readiness probe is the deploy contract
+  # (docs/09): "this instance can take traffic now".
+  verify_cmd="ssh $SSH_OPTS $SSH_TARGET \"curl -sf -o /dev/null http://127.0.0.1:$SERVER_PORT/ready\""
 fi
 
 transport="local (dry-run target: same machine as CI)"
@@ -125,7 +131,8 @@ echo "deploy: $IMAGE -> $SERVER_HOST:$SERVER_PORT ($transport)"
 sh -c "$deploy_cmd"
 
 # --- verify: the app ANSWERS (up to ~30s: recreate + boot) -------------------
-echo "deploy: waiting for http://$SERVER_HOST:$SERVER_PORT/notes to answer..."
+# ch.9: the wait speaks for /ready (the readiness contract), not /notes.
+echo "deploy: waiting for http://$SERVER_HOST:$SERVER_PORT/ready to answer..."
 ok=no
 for _ in $(seq 1 30); do
   if sh -c "$verify_cmd" 2>/dev/null; then ok=yes; break; fi

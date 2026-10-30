@@ -20,7 +20,23 @@ from datetime import UTC, datetime
 # The complete list of fields a log line may carry.
 # The first four are added by the formatter itself; the rest are
 # our own event fields, added when views.py logs with extra={...}.
-_FIELDS = ("time", "level", "logger", "message", "event", "note_id")
+# ch.9: trace_id — the OpenTelemetry trace of the request that produced
+# this line (otel.py registers a provider; the field is absent for logs
+# written outside any request, and when OTEL_ENABLED=false).
+_FIELDS = ("time", "level", "logger", "message", "event", "note_id", "trace_id")
+
+# ch.9's seam: otel.py hands us a callable that returns the active span's
+# trace id for a given log record (or None when there is no active span).
+# Keeping it as a hook - instead of importing opentelemetry here - means
+# the logging module stays dependency-free, and OTEL_ENABLED=false leaves
+# it as None: log lines simply omit trace_id, no import error, no "0…0".
+_trace_id_provider = None
+
+
+def set_trace_id_provider(provider) -> None:
+    """Install the callable otel.py provides (called once, at app startup)."""
+    global _trace_id_provider
+    _trace_id_provider = provider
 
 
 class JsonFormatter(logging.Formatter):
@@ -39,11 +55,17 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        # Our event fields (event / note_id / title; ch.9: trace_id)
-        # arrive via logger.info(..., extra={...}) and are picked up by name here.
+        # Our event fields (event / note_id / title) arrive via
+        # logger.info(..., extra={...}) and are picked up by name here.
         for key in _FIELDS:
             if key in record.__dict__:
                 entry[key] = record.__dict__[key]
+        # ch.9: the active request's trace id, looked up through otel.py's
+        # provider (absent when OTEL is off or there is no active span).
+        if _trace_id_provider is not None:
+            trace_id = _trace_id_provider(record)
+            if trace_id is not None:
+                entry["trace_id"] = trace_id
         if record.exc_info:
             # The traceback goes inside the same JSON object,
             # not as a separate multi-line block.

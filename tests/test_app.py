@@ -3,7 +3,9 @@
 ch.1's point was that `make test` works from day one. ch.3 adds the HTML
 face, so this file now covers both: the JSON API (the "API") and the
 browser-rendered pages (the "UI"). ch.2's persistence proof lives in
-test_smoke.py; the full CI-ready suite grows in ch.11.
+test_smoke.py; the full CI-ready suite grows in ch.11. ch.9 adds the
+health/readiness probes - the endpoints the Dockerfile's HEALTHCHECK and
+compose's healthcheck: call.
 """
 
 from fastapi.testclient import TestClient
@@ -71,3 +73,18 @@ def test_html_delete():
 def test_missing_note_is_404_on_both_faces():
     assert client.get("/note/999999").status_code == 404
     assert client.get("/notes/999999").status_code == 404
+
+
+# ch.9: the two probes. Both must answer 200 the moment the server is up -
+# that is the contract the Dockerfile's HEALTHCHECK and compose's
+# healthcheck: rely on ("the container is alive / ready").
+def test_health_is_always_200_when_up():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+
+def test_ready_is_200_when_up():
+    r = client.get("/ready")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ready"

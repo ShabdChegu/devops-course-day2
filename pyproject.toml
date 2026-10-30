@@ -12,6 +12,14 @@ dependencies = [
     "python-multipart>=0.0.32",
     "sqlalchemy>=2.0,<2.1",
     "uvicorn[standard]>=0.30",
+    # ch.9: tracing. The SDK + FastAPI auto-instrumentation create the
+    # spans; two exporters are pulled so both OTEL_EXPORTER options exist:
+    # ConsoleSpanExporter (stdlib, always available) and OTLP/gRPC (ch.10's
+    # flip - what ships traces to the SigNoz container).
+    "opentelemetry-api>=1.20,<2",
+    "opentelemetry-sdk>=1.20,<2",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20,<2",
 ]
 
 [dependency-groups]

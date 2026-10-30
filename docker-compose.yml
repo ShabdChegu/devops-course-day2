@@ -37,6 +37,29 @@ services:
       DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
       # ch.6: the log level knob - behavior from the environment, not code.
       LOG_LEVEL: INFO
+      # ch.9: tracing knobs, all environment-driven (ch.5's rule).
+      # OTEL_ENABLED defaults on in code; say "false" to run a container
+      # with zero OpenTelemetry. OTEL_EXPORTER picks the destination:
+      # "console" (the ch.9 default - spans print to stdout, no new
+      # containers) or "otlp" (ch.10 - gRPC to the SigNoz collector).
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_EXPORTER: ${OTEL_EXPORTER:-console}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-notes-app}
+      # The ch.10 destination: inside the compose network, the SigNoz
+      # container's OTLP/gRPC port. ch.9's console exporter never reads
+      # this - it is pre-wired, not active.
+      OTEL_OTLP_ENDPOINT: ${OTEL_OTLP_ENDPOINT:-http://signoz:4317}
+    # ch.9: a readiness-gated liveness check, mirroring the Dockerfile's
+    # HEALTHCHECK. Nothing depends on the app yet in ch.9 (the db already
+    # has its own pg_isready check), but the endpoint now EXISTS, so a
+    # later service - ch.10's log collector, or a load balancer - can
+    # `depends_on: app: service_healthy` instead of guessing.
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
     ports:
       - "8000:8000"
 
