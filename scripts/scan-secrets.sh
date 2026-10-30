@@ -34,11 +34,20 @@ echo "scan: using regex fallback"
 # students to distrust it - false positives kill a tool's credibility.
 # (This comment deliberately avoids a literal credential so the scanner
 # does not flag the very file that owns it.)
+#
+# ch.10: signoz/casting.yaml.lock is VENDORed upstream provenance (the
+# rendered config SigNoz's Foundry generator pins), not course-authored -
+# the same reason uv.lock is excluded. It carries SigNoz's own dev-only
+# metastore credentials (a private, non-published postgres), which look
+# credential-shaped but are the vendor's shipped defaults, not a leak. The
+# two RUNNABLE compose files (root + signoz/compose.yaml) interpolate those
+# same values instead, so they stay scanner-meaningful.
 hits=$(grep -rniE \
   --exclude-dir=.git \
   --exclude-dir=.venv \
   --exclude=.env.example \
   --exclude=uv.lock \
+  --exclude=casting.yaml.lock \
   --exclude-dir=node_modules \
   -e '(postgres(ql)?|mysql|mongodb)(\+[^:]+)?://[^:/ "${}]+:[^@ "${}]+@' \
   -e 'sk-[a-zA-Z0-9_-]{20,}' \

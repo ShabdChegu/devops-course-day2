@@ -3,7 +3,12 @@
 # Verifies, with actionable messages:
 #   - tools present: git, uv, docker
 #   - docker daemon reachable
-#   - course ports free: 8000 (app) 5432 (postgres) 8080/9095 (signoz) 13000 (jenkins)
+#   - course ports free: 8000 (app) 5432 (postgres) 8080 (signoz UI)
+#                       4317/4318 (signoz OTLP) 13000 (jenkins)
+# ch.10: 8080/4317/4318 are only BUSY when the signoz profile is running -
+# the check still lists them so a second `make up-signoz` (or a manual
+# signoz/) warns you, not clobbers a UI you were about to create an
+# admin account on.
 set -u
 fail=0
 
@@ -42,7 +47,10 @@ done
 if [ -n "$PY" ]; then
   busy=$("$PY" - <<'PYEOF'
 import socket
-ports = [8000, 5432, 8080, 9095, 13000]
+# ch.10: the signoz ports are 8080 (UI) + 4317/4318 (OTLP gRPC/HTTP).
+# 8080 is INSIDE the jenkins container too, but jenkins publishes to host
+# 13000 (jenkins/docker-compose.yml: "13000:8080") - so no host clash.
+ports = [8000, 5432, 8080, 4317, 4318, 13000]
 busy = []
 for p in ports:
     s = socket.socket()
@@ -81,7 +89,7 @@ PYEOF
     done
     fail=1
   else
-    echo "  ok    ports free: 8000 5432 8080 9095 13000"
+    echo "  ok    ports free: 8000 5432 8080 4317 4318 13000"
   fi
 else
   echo "  warn  no system python 3.7+ found - skipping port check"

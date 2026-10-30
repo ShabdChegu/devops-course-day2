@@ -20,7 +20,7 @@ DevOps concept around it, and each branch is a complete, working, runnable state
 ## Getting started (ch.0)
 1. Install: `git`, `uv` (https://docs.astral.sh/uv/), Docker (daemon running).
 2. `make check` — verifies tools, the docker daemon, and that the course's ports
-   (8000, 5432, 8080, 9095, 13000) are free. Read its output; it tells you
+   (8000, 5432, 8080, 4317, 4318, 13000) are free. Read its output; it tells you
    exactly what to fix.
 3. Read `PLAN.md` — the full chapter map.
 4. `git checkout 01-fastapi` — start chapter 1.
@@ -37,6 +37,11 @@ flowchart LR
     end
     subgraph appc["docker-compose.yml (the app server)"]
         app["app + postgres<br/>(core profile)"]
+        subgraph signoz["signoz profile (ch.10)"]
+            ing["ingester OTLP :4317"]
+            ch["clickhouse<br/>(telemetry)"]
+            sig["signoz UI :8080"]
+        end
     end
     dockerd["host docker daemon"]
     hub["Docker Hub"]
@@ -47,20 +52,22 @@ flowchart LR
 
     gh -->|"Poll SCM H/5"| jenkins
     jenkins -->|"docker build via socket"| dockerd
-    jenkins -->|"trivy gate: library CRITICALs"| jenkins
     jenkins -->|"docker push user/notes-app:<sha>"| hub
     jenkins -.->|"ssh: deploy.sh"| box
-    box -->|"docker pull + compose up -d<br/>(re-pulls that tag)"| hub
+    box -->|"docker pull + compose up -d"| hub
     box -->|"curl /ready: the box answers"| bapp
+    app -->|"OTLP 4317<br/>traces + metrics + logs"| ing
+    ing --> ch
+    sig --> ch
 ```
 
-*As of ch.9: the topology is the ch.8 one — nothing new starts on the
-machine (that's the point of the chapter). What changed is **what the app
-emits**: its stdout now carries ch.6's JSON logs *and* ch.9's traces,
-correlated by a `trace_id` stamped onto every log line a request produces
-(read both with `make logs`). CD's verify also moved to the `/ready` probe.
-SigNoz — the box that finally receives traces — lands in ch.10. Each
-chapter's doc shows this same diagram at its own snapshot.*
+*As of ch.10: the observability box lands — SigNoz joins the app server as
+the `signoz` profile (Option A; `signoz/` carries the same stack as its own
+project, Option B). The app's one network hop (OTLP gRPC 4317, via the
+ingester's `signoz` alias) delivers **all three pillars** — ch.9's traces,
+ch.10's metrics, and its JSON logs — into one ClickHouse, cross-linked by
+`trace_id`; the UI (:8080) is where the SLO alert and the incident drill
+live. Each chapter's doc shows this same diagram at its own snapshot.*
 
 ## Branch map
 | # | Branch | Concept |

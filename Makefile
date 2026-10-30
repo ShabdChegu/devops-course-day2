@@ -1,6 +1,6 @@
 # DevOps course command surface. Grows one target group per chapter:
 #   ch.0 check+help | ch.1 run/test/lint | ch.4 build | ch.5 up/down
-#   ch.6 logs | ch.7 pipeline | ch.8 deploy | ch.12 polish
+#   ch.6 logs | ch.7 pipeline | ch.8 deploy | ch.10 up-signoz | ch.12 polish
 
 IMAGE ?= notes-app
 
@@ -23,6 +23,9 @@ help:
 	@echo "  make logs    tail the app's structured (JSON) logs from the stack"
 	@echo "  make deploy    ch.8: run server/deploy.sh (the target-aware deploy; TAG=<img:tag>)"
 	@echo "  make pipeline  ch.7: start the CI server (Jenkins, its own compose project)"
+	@echo "  make up-signoz ch.10: start the SigNoz stack (traces+metrics+logs, signoz profile)"
+	@echo "  make down-signoz ch.10: stop the SigNoz stack (keeps its data volumes)"
+	@echo "  make reset-signoz ch.10: wipe the SigNoz data volumes (drops all telemetry)"
 	@echo "  make help    this list"
 
 # Prerequisites gate - see scripts/check.sh
@@ -97,6 +100,62 @@ down:
 reset-db:
 	docker compose --profile core down -v
 	$(MAKE) up
+
+# ch.10: bring up the SigNoz observability stack (signoz profile) WITH the
+# core app - the whole point is the app shipping telemetry to it. The
+# profile is opt-in, so a plain `make up` still starts core only.
+#
+# First boot = image pulls + one-time schema migration: up to ~3 min.
+# The verify loop does NOT say "all 7 signoz containers are up" - two of
+# them are one-shot jobs (user-scripts, migrator) that correctly sit in
+# "exited (0)" after a green boot; the real question is "the SigNoz UI
+# answers", i.e. the collector finished gating on the migration (docs/10
+# pitfall #1 - data can lag a fresh boot).
+up-signoz:
+	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
+	docker compose --profile core --profile signoz up -d
+	@echo "waiting for SigNoz to finish booting (pulls + schema migration, ~90s first time)..."
+	@ok=no; \
+	for i in $$(seq 1 90); do \
+		ui=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ 2>/dev/null || true); \
+		[ "$$ui" = "200" ] && ok=yes && break; \
+		sleep 2; \
+	done; \
+	if [ "$$ok" = "yes" ]; then \
+		echo "signoz up: UI http://127.0.0.1:8080 - first visit is the 'create admin account' step (docs/10 step 2)"; \
+		echo "OTLP ingestion: http://127.0.0.1:4317 (gRPC, what OTEL_OTLP_ENDPOINT points at) + 4318 (HTTP)"; \
+		echo ""; \
+		echo "the ch.10 flip is ONE LINE in .env: OTEL_EXPORTER=otlp, then"; \
+		echo "  docker compose --profile core up -d --force-recreate app   (docs/10 step 3)"; \
+	else \
+		echo "!! signoz did not come up (90s). State:"; \
+		docker compose --profile core --profile signoz ps; \
+		echo ""; \
+		echo "   usual suspects (docs/10 pitfalls):"; \
+		echo "   - user-scripts job 'exited (1)' repeatedly: no internet for the one-time"; \
+		echo "     ClickHouse UDF download (signoz/README.md 'the one outbound call')"; \
+		echo "   - clickhouse stuck 'starting': it waits for keeper + user-scripts (bring-up order)"; \
+		echo "   - collector log tail:"; docker compose --profile signoz logs --tail 10 signoz-ingester 2>&1; \
+		exit 1; \
+	fi
+
+# ch.10: stop the SigNoz stack - `stop`, not `down`: signoz-network is
+# shared with the running app (ch.10's Option A), and `down` would trip
+# over it. SigNoz's 4 data volumes are kept - the next up-signoz resumes.
+down-signoz:
+	docker compose --profile signoz stop
+	@echo "signoz stopped (data kept). Restart: make up-signoz"
+
+# ch.10: wipe ONLY SigNoz's telemetry data (its 4 named volumes) - never
+# `down -v`, which would also drop pgdata (your notes, the ch.5 gotcha in
+# reverse). Volume names carry the project prefix (devops_course_).
+reset-signoz:
+	-@docker compose --profile signoz stop
+	docker volume rm devops_course_signoz-metastore-postgres-0-data \
+	  devops_course_signoz-telemetrykeeper-0-data \
+	  devops_course_signoz-telemetrystore-0-0-data \
+	  devops_course_signoz-telemetrystore-user-scripts
+	@echo "signoz volumes wiped (a fresh boot re-runs the one-time migration). Notes (pgdata) untouched."
 
 # ch.5's secrets habit: the same scan that pre-commit runs, on demand.
 # Runs gitleaks if you have it, else the regex fallback in the script.
@@ -177,4 +236,4 @@ deploy:
 	@if [ ! -f .env ]; then echo ".env missing - created from .env.example (change the password!)"; cp .env.example .env; fi
 	@if [ -n "$(TAG)" ]; then bash server/deploy.sh "$(TAG)"; else bash server/deploy.sh; fi
 
-.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs pipeline deploy
+.PHONY: help check run test lint lint-fix build run-docker up down reset-db scan logs pipeline deploy up-signoz down-signoz reset-signoz
