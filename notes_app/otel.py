@@ -63,7 +63,11 @@ def setup_otel(app) -> None:
         # container. Note the scheme: gRPC transport speaks over `http://`,
         # not `https://` — a classic foot-gun when copy-pasting endpoint
         # values.
-        from opentelemetry.exporter.otlp.proto.grpc.trace import OTLPSpanExporter
+        # NOTE the module name: recent OTel releases dropped the deprecated
+        # `...grpc.trace` alias; the exporter lives in `...grpc.trace_exporter`.
+        # uv.lock pins 0.66b2, and tests/test_otel.py imports this exact path
+        # so a lockfile bump can't silently break ch.10's one-line flip.
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
         endpoint = os.environ.get("OTEL_OTLP_ENDPOINT", "http://localhost:4317")
         span_exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
