@@ -17,6 +17,8 @@ DevOps concept around it, and each branch is a complete, working, runnable state
 - **A doc per chapter.** `docs/NN-slug.md` teaches the concept *and* explains
   what changed in that branch.
 
+> 📊 **Executive Presentation & Summary**: See [docs/COURSE_SUMMARY.md](docs/COURSE_SUMMARY.md) for concise tables, Mermaid architecture diagrams, and slide-by-slide summaries across all 12 chapters (optimized for PDF export).
+
 ## Getting started (ch.0)
 1. Install: `git`, `uv` (https://docs.astral.sh/uv/), Docker (daemon running).
 2. `make check` — verifies tools, the docker daemon, and that the course's ports
