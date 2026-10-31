@@ -21,7 +21,7 @@
 set -euo pipefail
 
 BOX_DIR="${1:-$HOME/devops-course-server}"
-REPO="${2:-https://github.com/amanupadhyay/devops-course}"
+REPO="${2:-https://github.com/ShabdChegu/devops-course-day2.git}"
 BRANCH="${3:-08-jenkins-cd}"
 
 echo "bootstrap: box target: $BOX_DIR"
